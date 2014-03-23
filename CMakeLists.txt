@@ -10,7 +10,8 @@ ADD_EXECUTABLE(fs-state fs-state.c
 		backend/snapshot.c
 		backend/extroot.c
 		backend/jffs2.c
-			lib/mtd.c
+		driver/volume.c
+		driver/mtd.c
 		lib/mount.c
 		lib/find.c)
 
@@ -23,7 +24,9 @@ ADD_EXECUTABLE(block block.c
 		libblkid-tiny/ext.c
 		libblkid-tiny/jffs2.c
 		libblkid-tiny/vfat.c
+		libblkid-tiny/hfs.c
 		libblkid-tiny/swap.c
+		libblkid-tiny/ubifs.c
 		libblkid-tiny/squashfs.c)
 TARGET_LINK_LIBRARIES(block uci ubox blobmsg_json)
 INSTALL(TARGETS block RUNTIME DESTINATION sbin)

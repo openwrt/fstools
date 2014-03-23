@@ -15,8 +15,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../lib/mtd.h"
 #include "../fs-state.h"
+
+#include "../driver/volume.h"
 
 int
 backend_mount(char *name)
@@ -43,17 +44,14 @@ backend_info(char *name)
 static int
 start(int argc, char **argv)
 {
-	char mtd[32];
+	struct volume *v = volume_find("rootfs_data");
 
 	if (!getenv("PREINIT"))
 		return -1;
 
-	if (find_mtd_char("rootfs_data", mtd, sizeof(mtd))) {
-		if (!find_mtd_char("rootfs", mtd, sizeof(mtd))) {
-			int fd = mtd_load(mtd);
-			if (fd > 0)
-				mtd_unlock(fd);
-		}
+	if (!v) {
+		v = volume_find("rootfs");
+		volume_init(v);
 		fprintf(stderr, "mounting /dev/root\n");
 		mount("/dev/root", "/", NULL, MS_NOATIME | MS_REMOUNT, 0);
 		return 0;
@@ -65,7 +63,7 @@ start(int argc, char **argv)
 		return 0;
 	}
 
-	switch (mtd_identify(mtd)) {
+	switch (volume_identify(v)) {
 	case FS_NONE:
 	case FS_DEADCODE:
 		return ramoverlay();
@@ -94,12 +92,12 @@ stop(int argc, char **argv)
 static int
 done(int argc, char **argv)
 {
-	char mtd[32];
+	struct volume *v = volume_find("rootfs_data");
 
-	if (find_mtd_char("rootfs_data", mtd, sizeof(mtd)))
+	if (!v)
 		return -1;
 
-	switch (mtd_identify(mtd)) {
+	switch (volume_identify(v)) {
 	case FS_NONE:
 	case FS_DEADCODE:
 		return jffs2_switch(argc, argv);
@@ -111,12 +109,12 @@ done(int argc, char **argv)
 static int
 info(int argc, char **argv)
 {
-	char mtd[32];
+	struct volume *v = volume_find("rootfs_data");
 
-	if (find_mtd_char("rootfs_data", mtd, sizeof(mtd)))
+	if (!v)
 		return -1;
 
-	switch (mtd_identify(mtd)) {
+	switch (volume_identify(v)) {
 	case FS_SNAPSHOT:
 		backend_info("snapshot");
 		return 0;

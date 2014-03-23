@@ -31,7 +31,7 @@
 #include <libubox/md5.h>
 
 #include "../fs-state.h"
-#include "../lib/mtd.h"
+#include "../driver/volume.h"
 
 #define PATH_MAX	256
 #define OWRT		0x4f575254
@@ -82,15 +82,15 @@ be32_to_hdr(struct file_header *hdr)
 }
 
 static int
-pad_file_size(int size)
+pad_file_size(struct volume *v, int size)
 {
 	int mod;
 
 	size += sizeof(struct file_header);
-	mod = size % erasesize;
+	mod = size % v->block_size;
 	if (mod) {
 		size -= mod;
-		size += erasesize;
+		size += v->block_size;
 	}
 
 	return size;
@@ -115,7 +115,7 @@ verify_file_hash(char *file, uint32_t *hash)
 }
 
 static int
-snapshot_next_free(int fd, uint32_t *seq)
+snapshot_next_free(struct volume *v, uint32_t *seq)
 {
 	struct file_header hdr = { 0 };
 	int block = 0;
@@ -123,7 +123,7 @@ snapshot_next_free(int fd, uint32_t *seq)
 	*seq = rand();
 
 	do {
-		if (mtd_read_buffer(fd, &hdr, block * erasesize, sizeof(struct file_header))) {
+		if (volume_read(v, &hdr, block * v->block_size, sizeof(struct file_header))) {
 			fprintf(stderr, "scanning for next free block failed\n");
 			return 0;
 		}
@@ -137,7 +137,7 @@ snapshot_next_free(int fd, uint32_t *seq)
 			if (*seq + 1 != hdr.seq && block)
 				return block;
 			*seq = hdr.seq;
-			block += pad_file_size(hdr.length) / erasesize;
+			block += pad_file_size(v, hdr.length) / v->block_size;
 		}
 	} while (hdr.type == DATA);
 
@@ -145,18 +145,18 @@ snapshot_next_free(int fd, uint32_t *seq)
 }
 
 static int
-config_find(int fd, struct file_header *conf, struct file_header *sentinel)
+config_find(struct volume *v, struct file_header *conf, struct file_header *sentinel)
 {
 	uint32_t seq;
-	int i, next = snapshot_next_free(fd, &seq);
+	int i, next = snapshot_next_free(v, &seq);
 
 	conf->magic = sentinel->magic = 0;
 
-	if (!mtd_read_buffer(fd, conf, next, sizeof(*conf)))
+	if (!volume_read(v, conf, next, sizeof(*conf)))
 		be32_to_hdr(conf);
 
-	for (i = (mtdsize / erasesize) - 1; i > 0; i--) {
-		if (mtd_read_buffer(fd, sentinel,  i * erasesize, sizeof(*sentinel))) {
+	for (i = (v->size / v->block_size) - 1; i > 0; i--) {
+		if (volume_read(v, sentinel,  i * v->block_size, sizeof(*sentinel))) {
 			fprintf(stderr, "failed to read header\n");
 			return -1;
 		}
@@ -175,18 +175,17 @@ config_find(int fd, struct file_header *conf, struct file_header *sentinel)
 static int
 snapshot_info(void)
 {
-	int fd = mtd_load("rootfs_data");
+	struct volume *v = volume_find("rootfs_data");
 	struct file_header hdr = { 0 }, conf;
 	int block = 0;
 
-	if (fd < 1)
+	if (!v)
 		return -1;
 
-	fprintf(stderr, "sectors:\t%d, erasesize:\t%dK\n", mtdsize / erasesize, erasesize / 1024);
+	fprintf(stderr, "sectors:\t%llu, block_size:\t%dK\n", v->size / v->block_size, v->block_size / 1024);
 	do {
-		if (mtd_read_buffer(fd, &hdr, block * erasesize, sizeof(struct file_header))) {
+		if (volume_read(v, &hdr, block * v->block_size, sizeof(struct file_header))) {
 			fprintf(stderr, "scanning for next free block failed\n");
-			close(fd);
 			return 0;
 		}
 
@@ -196,22 +195,22 @@ snapshot_info(void)
 			break;
 
 		if (hdr.type == DATA)
-			fprintf(stderr, "block %d:\tsnapshot entry, size: %d, sectors: %d, sequence: %d\n", block,  hdr.length, pad_file_size(hdr.length) / erasesize, hdr.seq);
+			fprintf(stderr, "block %d:\tsnapshot entry, size: %d, sectors: %d, sequence: %d\n", block,  hdr.length, pad_file_size(v, hdr.length) / v->block_size, hdr.seq);
 		else if (hdr.type == CONF)
-			fprintf(stderr, "block %d:\tvolatile entry, size: %d, sectors: %d, sequence: %d\n", block,  hdr.length, pad_file_size(hdr.length) / erasesize, hdr.seq);
+			fprintf(stderr, "block %d:\tvolatile entry, size: %d, sectors: %d, sequence: %d\n", block,  hdr.length, pad_file_size(v, hdr.length) / v->block_size, hdr.seq);
 
 		if (hdr.type == DATA && !valid_file_size(hdr.length))
-			block += pad_file_size(hdr.length) / erasesize;
+			block += pad_file_size(v, hdr.length) / v->block_size;
 	} while (hdr.type == DATA);
-	block = config_find(fd, &conf, &hdr);
+	block = config_find(v, &conf, &hdr);
 	if (block > 0)
-		fprintf(stderr, "block %d:\tsentinel entry, size: %d, sectors: %d, sequence: %d\n", block, hdr.length, pad_file_size(hdr.length) / erasesize, hdr.seq);
-	close(fd);
+		fprintf(stderr, "block %d:\tsentinel entry, size: %d, sectors: %d, sequence: %d\n", block, hdr.length, pad_file_size(v, hdr.length) / v->block_size, hdr.seq);
+
 	return 0;
 }
 
 static int
-snapshot_write_file(int fd, int block, char *file, uint32_t seq, uint32_t type)
+snapshot_write_file(struct volume *v, int block, char *file, uint32_t seq, uint32_t type)
 {
 	uint32_t md5[4] = { 0 };
 	struct file_header hdr;
@@ -225,12 +224,12 @@ snapshot_write_file(int fd, int block, char *file, uint32_t seq, uint32_t type)
 		goto out;
 	}
 
-	if ((block * erasesize) + pad_file_size(s.st_size) > mtdsize) {
+	if ((block * v->block_size) + pad_file_size(v, s.st_size) > v->size) {
 		fprintf(stderr, "upgrade is too big for the flash\n");
 		goto out;
 	}
-	mtd_erase(fd, block, (pad_file_size(s.st_size) / erasesize));
-	mtd_erase(fd, block + (pad_file_size(s.st_size) / erasesize), 1);
+	volume_erase(v, block * v->block_size, pad_file_size(v, s.st_size));
+	volume_erase(v, block * v->block_size + pad_file_size(v, s.st_size), v->block_size);
 
 	hdr.length = s.st_size;
 	hdr.magic = OWRT;
@@ -239,7 +238,7 @@ snapshot_write_file(int fd, int block, char *file, uint32_t seq, uint32_t type)
 	memcpy(hdr.md5, md5, sizeof(md5));
 	hdr_to_be32(&hdr);
 
-	if (mtd_write_buffer(fd, &hdr, block * erasesize, sizeof(struct file_header))) {
+	if (volume_write(v, &hdr, block * v->block_size, sizeof(struct file_header))) {
 		fprintf(stderr, "failed to write header\n");
 		goto out;
 	}
@@ -250,10 +249,10 @@ snapshot_write_file(int fd, int block, char *file, uint32_t seq, uint32_t type)
 		goto out;
 	}
 
-	offset = (block * erasesize) + sizeof(struct file_header);
+	offset = (block * v->block_size) + sizeof(struct file_header);
 
 	while ((len = read(in, buffer, sizeof(buffer))) > 0) {
-		if (mtd_write_buffer(fd, buffer, offset, len) < 0)
+		if (volume_write(v, buffer, offset, len) < 0)
 			goto out;
 		offset += len;
 	}
@@ -268,13 +267,13 @@ out:
 }
 
 static int
-snapshot_read_file(int fd, int block, char *file, uint32_t type)
+snapshot_read_file(struct volume *v, int block, char *file, uint32_t type)
 {
 	struct file_header hdr;
 	char buffer[256];
-	int out;
+	int out, offset = 0;
 
-	if (mtd_read_buffer(fd, &hdr, block * erasesize, sizeof(struct file_header))) {
+	if (volume_read(v, &hdr, block * v->block_size, sizeof(struct file_header))) {
 		fprintf(stderr, "failed to read header\n");
 		return -1;
 	}
@@ -301,10 +300,10 @@ snapshot_read_file(int fd, int block, char *file, uint32_t type)
 		if (hdr.length < len)
 			len = hdr.length;
 
-		if ((read(fd, buffer, len) != len) || (write(out, buffer, len) != len)) {
+		if ((volume_read(v, buffer, offset, len) != len) || (write(out, buffer, len) != len))
 			return -1;
-		}
 
+		offset += len;
 		hdr.length -= len;
 	}
 
@@ -316,13 +315,13 @@ snapshot_read_file(int fd, int block, char *file, uint32_t type)
 		return 0;
 	}
 
-        block += pad_file_size(hdr.length) / erasesize;
+        block += pad_file_size(v, hdr.length) / v->block_size;
 
 	return block;
 }
 
 static int
-sentinel_write(int fd, uint32_t _seq)
+sentinel_write(struct volume *v, uint32_t _seq)
 {
 	int ret, block;
 	struct stat s;
@@ -333,15 +332,15 @@ sentinel_write(int fd, uint32_t _seq)
 		return -1;
 	}
 
-	snapshot_next_free(fd, &seq);
+	snapshot_next_free(v, &seq);
 	if (_seq)
 		seq = _seq;
-	block = mtdsize / erasesize;
-	block -= pad_file_size(s.st_size) / erasesize;
+	block = v->size / v->block_size;
+	block -= pad_file_size(v, s.st_size) / v->block_size;
 	if (block < 0)
 		block = 0;
 
-	ret = snapshot_write_file(fd, block, "/tmp/config.tar.gz", seq, CONF);
+	ret = snapshot_write_file(v, block, "/tmp/config.tar.gz", seq, CONF);
 	if (ret)
 		fprintf(stderr, "failed to write sentinel\n");
 	else
@@ -350,18 +349,18 @@ sentinel_write(int fd, uint32_t _seq)
 }
 
 static int
-volatile_write(int fd, uint32_t _seq)
+volatile_write(struct volume *v, uint32_t _seq)
 {
 	int block, ret;
 	uint32_t seq;
 
-	block = snapshot_next_free(fd, &seq);
+	block = snapshot_next_free(v, &seq);
 	if (_seq)
 		seq = _seq;
 	if (block < 0)
 		block = 0;
 
-	ret = snapshot_write_file(fd, block, "/tmp/config.tar.gz", seq, CONF);
+	ret = snapshot_write_file(v, block, "/tmp/config.tar.gz", seq, CONF);
 	if (ret)
 		fprintf(stderr, "failed to write /tmp/config.tar.gz\n");
 	else
@@ -372,19 +371,15 @@ volatile_write(int fd, uint32_t _seq)
 static int
 config_write(int argc, char **argv)
 {
-	int fd, ret;
+	struct volume *v = volume_find("rootfs_data");
+	int ret;
 
-	fd = mtd_load("rootfs_data");
-	if (fd < 1) {
-		fprintf(stderr, "failed to open rootfs_config\n");
+	if (!v)
 		return -1;
-	}
 
-	ret = volatile_write(fd, 0);
+	ret = volatile_write(v, 0);
 	if (!ret)
-		ret = sentinel_write(fd, 0);
-
-	close(fd);
+		ret = sentinel_write(v, 0);
 
 	return ret;
 }
@@ -392,55 +387,49 @@ config_write(int argc, char **argv)
 static int
 config_read(int argc, char **argv)
 {
+	struct volume *v = volume_find("rootfs_data");
 	struct file_header conf, sentinel;
-	int fd, next, block, ret = 0;
+	int next, block, ret = 0;
 	uint32_t seq;
 
-	fd = mtd_load("rootfs_data");
-	if (fd < 1) {
-		fprintf(stderr, "failed to open rootfs_data\n");
+	if (!v)
 		return -1;
-	}
 
-	block = config_find(fd, &conf, &sentinel);
-	next = snapshot_next_free(fd, &seq);
+	block = config_find(v, &conf, &sentinel);
+	next = snapshot_next_free(v, &seq);
 	if (is_config(&conf) && conf.seq == seq)
 		block = next;
 	else if (!is_config(&sentinel) || sentinel.seq != seq)
 		return -1;
 
 	unlink("/tmp/config.tar.gz");
-	ret = snapshot_read_file(fd, block, "/tmp/config.tar.gz", CONF);
+	ret = snapshot_read_file(v, block, "/tmp/config.tar.gz", CONF);
 
 	if (ret < 1)
 		fprintf(stderr, "failed to read /tmp/config.tar.gz\n");
-	close(fd);
+
 	return ret;
 }
 
 static int
 snapshot_write(int argc, char **argv)
 {
-	int mtd, block, ret;
+	struct volume *v = volume_find("rootfs_data");
+	int block, ret;
 	uint32_t seq;
 
-	mtd = mtd_load("rootfs_data");
-	if (mtd < 1) {
-		fprintf(stderr, "failed to open rootfs_data\n");
+	if (!v)
 		return -1;
-	}
 
-	block = snapshot_next_free(mtd, &seq);
+	block = snapshot_next_free(v, &seq);
 	if (block < 0)
 		block = 0;
 
-	ret = snapshot_write_file(mtd, block, "/tmp/snapshot.tar.gz", seq + 1, DATA);
+	ret = snapshot_write_file(v, block, "/tmp/snapshot.tar.gz", seq + 1, DATA);
 	if (ret)
 		fprintf(stderr, "failed to write /tmp/snapshot.tar.gz\n");
 	else
 		fprintf(stderr, "wrote /tmp/snapshot.tar.gz\n");
-
-	close(mtd);
 
 	return ret;
 }
@@ -448,32 +437,33 @@ snapshot_write(int argc, char **argv)
 static int
 snapshot_mark(int argc, char **argv)
 {
-	FILE *fp;
 	__be32 owrt = cpu_to_be32(OWRT);
-	char mtd[32];
+	struct volume *v;
 	size_t sz;
+	int fd;
 
 	fprintf(stderr, "This will remove all snapshot data stored on the system. Are you sure? [N/y]\n");
 	if (getchar() != 'y')
 		return -1;
 
-	if (find_mtd_block("rootfs_data", mtd, sizeof(mtd))) {
+	v = volume_find("rootfs_data");
+	if (!v) {
 		fprintf(stderr, "no rootfs_data was found\n");
 		return -1;
 	}
 
-	fp = fopen(mtd, "w");
-	fprintf(stderr, "%s - marking with 0x4f575254\n", mtd);
-	if (!fp) {
-		fprintf(stderr, "opening %s failed\n", mtd);
+	fd = open(v->blk, O_WRONLY);
+	fprintf(stderr, "%s - marking with 0x%08x\n", v->blk, owrt);
+	if (fd < 0) {
+		fprintf(stderr, "opening %s failed\n", v->blk);
 		return -1;
 	}
 
-	sz = fwrite(&owrt, sizeof(owrt), 1, fp);
-	fclose(fp);
+	sz = write(fd, &owrt, sizeof(owrt));
+	close(fd);
 
 	if (sz != 1) {
-		fprintf(stderr, "writing %s failed: %s\n", mtd, strerror(errno));
+		fprintf(stderr, "writing %s failed: %s\n", v->blk, strerror(errno));
 		return -1;
 	}
 
@@ -483,58 +473,55 @@ snapshot_mark(int argc, char **argv)
 static int
 snapshot_read(int argc, char **argv)
 {
+	struct volume *v = volume_find("rootfs_data");;
+	int block = 0, ret = 0;
 	char file[64];
-	int block = 0, fd, ret = 0;
 
-	fd = mtd_load("rootfs_data");
-	if (fd < 1) {
-		fprintf(stderr, "failed to open rootfs_data\n");
+	if (!v)
 		return -1;
-	}
 
 	if (argc > 1) {
 		block = atoi(argv[1]);
-		if (block >= (mtdsize / erasesize)) {
-			fprintf(stderr, "invalid block %d > %d\n", block, mtdsize / erasesize);
+		if (block >= (v->size / v->block_size)) {
+			fprintf(stderr, "invalid block %d > %llu\n", block, v->size / v->block_size);
 			goto out;
 		}
 		snprintf(file, sizeof(file), "/tmp/snapshot/block%d.tar.gz", block);
 
-		ret = snapshot_read_file(fd, block, file, DATA);
+		ret = snapshot_read_file(v, block, file, DATA);
 		goto out;
 	}
 
 	do {
 		snprintf(file, sizeof(file), "/tmp/snapshot/block%d.tar.gz", block);
-		block = snapshot_read_file(fd, block, file, DATA);
+		block = snapshot_read_file(v, block, file, DATA);
 	} while (block > 0);
 
 out:
-	close(fd);
 	return ret;
 }
 
 static int
 snapshot_sync(void)
 {
-	int fd = mtd_load("rootfs_data");
+	struct volume *v = volume_find("rootfs_data");
 	struct file_header sentinel, conf;
 	int next, block = 0;
 	uint32_t seq;
 
-	if (fd < 1)
+	if (!v)
 		return -1;
 
-	next = snapshot_next_free(fd, &seq);
-	block = config_find(fd, &conf, &sentinel);
+	next = snapshot_next_free(v, &seq);
+	block = config_find(v, &conf, &sentinel);
 	if (is_config(&conf) && conf.seq != seq) {
 		conf.magic = 0;
-		mtd_erase(fd, next, 2);
+		volume_erase(v, next * v->block_size, 2 * v->block_size);
 	}
 
 	if (is_config(&sentinel) && (sentinel.seq != seq)) {
 		sentinel.magic = 0;
-		mtd_erase(fd, block, 1);
+		volume_erase(v, block * v->block_size, v->block_size);
 	}
 
 	if (!is_config(&conf) && !is_config(&sentinel)) {
@@ -543,22 +530,21 @@ snapshot_sync(void)
 				(memcmp(conf.md5, sentinel.md5, sizeof(conf.md5)) || (conf.seq != sentinel.seq))) ||
 			(is_config(&conf) && !is_config(&sentinel))) {
 		uint32_t seq;
-		int next = snapshot_next_free(fd, &seq);
-		int ret = snapshot_read_file(fd, next, "/tmp/config.tar.gz", CONF);
+		int next = snapshot_next_free(v, &seq);
+		int ret = snapshot_read_file(v, next, "/tmp/config.tar.gz", CONF);
 		if (ret > 0) {
-			if (sentinel_write(fd, conf.seq))
+			if (sentinel_write(v, conf.seq))
 				fprintf(stderr, "failed to write sentinel data");
 		}
 	} else if (!is_config(&conf) && is_config(&sentinel) && next) {
-		int ret = snapshot_read_file(fd, block, "/tmp/config.tar.gz", CONF);
+		int ret = snapshot_read_file(v, block, "/tmp/config.tar.gz", CONF);
 		if (ret > 0)
-			if (volatile_write(fd, sentinel.seq))
+			if (volatile_write(v, sentinel.seq))
 				fprintf(stderr, "failed to write sentinel data");
 	} else
 		fprintf(stderr, "config in sync\n");
 
 	unlink("/tmp/config.tar.gz");
-	close(fd);
 
 	return 0;
 }

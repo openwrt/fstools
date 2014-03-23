@@ -112,59 +112,6 @@ find_mount_point(char *block, char *fs)
 	return point;
 }
 
-static char*
-find_mtd_index(char *name)
-{
-	FILE *fp = fopen("/proc/mtd", "r");
-	static char line[256];
-	char *index = NULL;
-
-	if(!fp)
-		return index;
-
-	while (!index && fgets(line, sizeof(line), fp)) {
-		if (strstr(line, name)) {
-			char *eol = strstr(line, ":");
-
-			if (!eol)
-				continue;
-
-			*eol = '\0';
-			index = &line[3];
-		}
-	}
-
-	fclose(fp);
-
-	return index;
-}
-
-int
-find_mtd_block(char *name, char *part, int plen)
-{
-	char *index = find_mtd_index(name);
-
-	if (!index)
-		return -1;
-
-	snprintf(part, plen, "/dev/mtdblock%s", index);
-
-	return 0;
-}
-
-int
-find_mtd_char(char *name, char *part, int plen)
-{
-	char *index = find_mtd_index(name);
-
-	if (!index)
-		return -1;
-
-	snprintf(part, plen, "/dev/mtd%s", index);
-
-	return 0;
-}
-
 int
 find_filesystem(char *fs)
 {
@@ -186,5 +133,3 @@ find_filesystem(char *fs)
 out:
 	return ret;
 }
-
-
