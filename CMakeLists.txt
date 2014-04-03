@@ -29,3 +29,10 @@ ADD_EXECUTABLE(block block.c
 		libblkid-tiny/squashfs.c)
 TARGET_LINK_LIBRARIES(block uci ubox blobmsg_json)
 INSTALL(TARGETS block RUNTIME DESTINATION sbin)
+
+ADD_EXECUTABLE(ubi ubi.c
+		libubi/libubi.c
+		libubi/libubi-tiny.c
+		libubi/ubiutils-common.c)
+
+INSTALL(TARGETS ubi RUNTIME DESTINATION sbin)
