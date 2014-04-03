@@ -6,15 +6,14 @@ ADD_DEFINITIONS(-Os -ggdb -Wall -Werror --std=gnu99 -Wmissing-declarations)
 SET(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
 
 ADD_EXECUTABLE(fs-state fs-state.c
-		backend/base.c
-		backend/snapshot.c
-		backend/extroot.c
-		backend/jffs2.c
-		driver/volume.c
-		driver/mtd.c
-		lib/mount.c
-		lib/find.c)
-
+		libfstools/mount_root.c
+		libfstools/snapshot.c
+		libfstools/extroot.c
+		libfstools/jffs2.c
+		libfstools/volume.c
+		libfstools/mtd.c
+		libfstools/mount.c
+		libfstools/find.c)
 TARGET_LINK_LIBRARIES(fs-state ubox)
 INSTALL(TARGETS fs-state RUNTIME DESTINATION sbin)
 

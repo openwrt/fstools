@@ -17,7 +17,7 @@
 
 #include "../fs-state.h"
 
-#include "../driver/volume.h"
+#include "volume.h"
 
 int
 backend_mount(char *name)

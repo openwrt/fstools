@@ -31,7 +31,7 @@
 #include <libubox/md5.h>
 
 #include "../fs-state.h"
-#include "../driver/volume.h"
+#include "volume.h"
 
 #define PATH_MAX	256
 #define OWRT		0x4f575254
