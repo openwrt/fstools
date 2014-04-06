@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../fs-state.h"
+#include "libfstools.h"
 #include "volume.h"
 
 enum {

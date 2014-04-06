@@ -15,34 +15,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../fs-state.h"
-
-#include "volume.h"
-
-int
-backend_mount(char *name)
-{
-	struct backend *b = find_backend(name);
-
-	if (!b || !b->mount)
-		return -1;
-
-	return b->mount();
-}
+#include "libfstools/libfstools.h"
+#include "libfstools/volume.h"
 
 static int
-backend_info(char *name)
-{
-	struct backend *b = find_backend(name);
-
-	if (!b || !b->info)
-		return -1;
-
-	return b->info();
-}
-
-static int
-start(int argc, char **argv)
+start(int argc, char *argv[1])
 {
 	struct volume *v = volume_find("rootfs_data");
 
@@ -58,7 +35,7 @@ start(int argc, char **argv)
 	}
 
 	extroot_prefix = "";
-	if (!backend_mount("extroot")) {
+	if (!mount_extroot()) {
 		fprintf(stderr, "fs-state: switched to extroot\n");
 		return 0;
 	}
@@ -69,11 +46,11 @@ start(int argc, char **argv)
 		return ramoverlay();
 
 	case FS_JFFS2:
-		backend_mount("overlay");
+		mount_overlay();
 		break;
 
 	case FS_SNAPSHOT:
-		backend_mount("snapshot");
+		mount_snapshot();
 		break;
 	}
 
@@ -81,7 +58,7 @@ start(int argc, char **argv)
 }
 
 static int
-stop(int argc, char **argv)
+stop(int argc, char *argv[1])
 {
 	if (!getenv("SHUTDOWN"))
 		return -1;
@@ -90,7 +67,7 @@ stop(int argc, char **argv)
 }
 
 static int
-done(int argc, char **argv)
+done(int argc, char *argv[1])
 {
 	struct volume *v = volume_find("rootfs_data");
 
@@ -106,43 +83,13 @@ done(int argc, char **argv)
 	return 0;
 }
 
-static int
-info(int argc, char **argv)
+int main(int argc, char **argv)
 {
-	struct volume *v = volume_find("rootfs_data");
-
-	if (!v)
-		return -1;
-
-	switch (volume_identify(v)) {
-	case FS_SNAPSHOT:
-		backend_info("snapshot");
-		return 0;
-	}
-
-	return 0;
+	if (argc < 2)
+		return start(argc, argv);
+	if (!strcmp(argv[1], "stop"))
+		return stop(argc, argv);
+	if (!strcmp(argv[1], "done"))
+		return done(argc, argv);
+	return -1;
 }
-
-static struct backend start_backend = {
-	.name = "start",
-	.cli = start,
-};
-BACKEND(start_backend);
-
-static struct backend stop_backend = {
-	.name = "stop",
-	.cli = stop,
-};
-BACKEND(stop_backend);
-
-static struct backend done_backend = {
-	.name = "done",
-	.cli = done,
-};
-BACKEND(done_backend);
-
-static struct backend info_backend = {
-	.name = "info",
-	.cli = info,
-};
-BACKEND(info_backend);

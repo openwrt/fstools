@@ -30,8 +30,8 @@
 #include <libubox/blob.h>
 #include <libubox/md5.h>
 
-#include "libfstools.h"
-#include "volume.h"
+#include "libfstools/libfstools.h"
+#include "libfstools/volume.h"
 
 #define PATH_MAX	256
 #define OWRT		0x4f575254
@@ -332,74 +332,152 @@ volatile_write(struct volume *v, uint32_t _seq)
 }
 
 static int
-snapshot_sync(void)
+config_write(int argc, char *argv[1])
 {
 	struct volume *v = volume_find("rootfs_data");
-	struct file_header sentinel, conf;
-	int next, block = 0;
+	int ret;
+
+	if (!v)
+		return -1;
+
+	ret = volatile_write(v, 0);
+	if (!ret)
+		ret = sentinel_write(v, 0);
+
+	return ret;
+}
+
+static int
+config_read(int argc, char *argv[1])
+{
+	struct volume *v = volume_find("rootfs_data");
+	struct file_header conf, sentinel;
+	int next, block, ret = 0;
 	uint32_t seq;
 
 	if (!v)
 		return -1;
 
-	next = snapshot_next_free(v, &seq);
 	block = config_find(v, &conf, &sentinel);
-	if (is_config(&conf) && conf.seq != seq) {
-		conf.magic = 0;
-		volume_erase(v, next * v->block_size, 2 * v->block_size);
-	}
-
-	if (is_config(&sentinel) && (sentinel.seq != seq)) {
-		sentinel.magic = 0;
-		volume_erase(v, block * v->block_size, v->block_size);
-	}
-
-	if (!is_config(&conf) && !is_config(&sentinel)) {
-	//	fprintf(stderr, "no config found\n");
-	} else if (((is_config(&conf) && is_config(&sentinel)) &&
-				(memcmp(conf.md5, sentinel.md5, sizeof(conf.md5)) || (conf.seq != sentinel.seq))) ||
-			(is_config(&conf) && !is_config(&sentinel))) {
-		uint32_t seq;
-		int next = snapshot_next_free(v, &seq);
-		int ret = snapshot_read_file(v, next, "/tmp/config.tar.gz", CONF);
-		if (ret > 0) {
-			if (sentinel_write(v, conf.seq))
-				fprintf(stderr, "failed to write sentinel data");
-		}
-	} else if (!is_config(&conf) && is_config(&sentinel) && next) {
-		int ret = snapshot_read_file(v, block, "/tmp/config.tar.gz", CONF);
-		if (ret > 0)
-			if (volatile_write(v, sentinel.seq))
-				fprintf(stderr, "failed to write sentinel data");
-	} else
-		fprintf(stderr, "config in sync\n");
+	next = snapshot_next_free(v, &seq);
+	if (is_config(&conf) && conf.seq == seq)
+		block = next;
+	else if (!is_config(&sentinel) || sentinel.seq != seq)
+		return -1;
 
 	unlink("/tmp/config.tar.gz");
+	ret = snapshot_read_file(v, block, "/tmp/config.tar.gz", CONF);
+
+	if (ret < 1)
+		fprintf(stderr, "failed to read /tmp/config.tar.gz\n");
+
+	return ret;
+}
+
+static int
+snapshot_write(int argc, char *argv[1])
+{
+	struct volume *v = volume_find("rootfs_data");
+	int block, ret;
+	uint32_t seq;
+
+	if (!v)
+		return -1;
+
+	block = snapshot_next_free(v, &seq);
+	if (block < 0)
+		block = 0;
+
+	ret = snapshot_write_file(v, block, "/tmp/snapshot.tar.gz", seq + 1, DATA);
+	if (ret)
+		fprintf(stderr, "failed to write /tmp/snapshot.tar.gz\n");
+	else
+		fprintf(stderr, "wrote /tmp/snapshot.tar.gz\n");
+
+	return ret;
+}
+
+static int
+snapshot_mark(int argc, char *argv[1])
+{
+	__be32 owrt = cpu_to_be32(OWRT);
+	struct volume *v;
+	size_t sz;
+	int fd;
+
+	fprintf(stderr, "This will remove all snapshot data stored on the system. Are you sure? [N/y]\n");
+	if (getchar() != 'y')
+		return -1;
+
+	v = volume_find("rootfs_data");
+	if (!v) {
+		fprintf(stderr, "no rootfs_data was found\n");
+		return -1;
+	}
+
+	fd = open(v->blk, O_WRONLY);
+	fprintf(stderr, "%s - marking with 0x%08x\n", v->blk, owrt);
+	if (fd < 0) {
+		fprintf(stderr, "opening %s failed\n", v->blk);
+		return -1;
+	}
+
+	sz = write(fd, &owrt, sizeof(owrt));
+	close(fd);
+
+	if (sz != 1) {
+		fprintf(stderr, "writing %s failed: %s\n", v->blk, strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
 
 static int
-_ramoverlay(char *rom, char *overlay)
+snapshot_read(int argc, char *argv[1])
 {
-	mount("tmpfs", overlay, "tmpfs", MS_NOATIME, "mode=0755");
-	return fopivot(overlay, rom);
+	struct volume *v = volume_find("rootfs_data");;
+	int block = 0, ret = 0;
+	char file[64];
+
+	if (!v)
+		return -1;
+
+	if (argc > 1) {
+		block = atoi(argv[1]);
+		if (block >= (v->size / v->block_size)) {
+			fprintf(stderr, "invalid block %d > %llu\n", block, v->size / v->block_size);
+			goto out;
+		}
+		snprintf(file, sizeof(file), "/tmp/snapshot/block%d.tar.gz", block);
+
+		ret = snapshot_read_file(v, block, file, DATA);
+		goto out;
+	}
+
+	do {
+		snprintf(file, sizeof(file), "/tmp/snapshot/block%d.tar.gz", block);
+		block = snapshot_read_file(v, block, file, DATA);
+	} while (block > 0);
+
+out:
+	return ret;
 }
 
-int
-mount_snapshot(void)
+int main(int argc, char **argv)
 {
-	snapshot_sync();
-	setenv("SNAPSHOT", "magic", 1);
-	_ramoverlay("/rom", "/overlay");
-	system("/sbin/snapshot unpack");
-	foreachdir("/overlay/", handle_whiteout);
-	mkdir("/volatile", 0700);
-	_ramoverlay("/rom", "/volatile");
-	mount_move("/rom/volatile", "/volatile", "");
-	mount_move("/rom/rom", "/rom", "");
-	system("/sbin/snapshot config_unpack");
-	foreachdir("/volatile/", handle_whiteout);
-	unsetenv("SNAPSHOT");
+	if (argc < 2)
+		return -1;
+
+	if (!strcmp(argv[1], "config_read"))
+		return config_read(argc, argv);
+	if (!strcmp(argv[1], "config_write"))
+		return config_write(argc, argv);
+	if (!strcmp(argv[1], "read"))
+		return snapshot_read(argc, argv);
+	if (!strcmp(argv[1], "write"))
+		return snapshot_write(argc, argv);
+	if (!strcmp(argv[1], "mark"))
+		return snapshot_mark(argc, argv);
 	return -1;
 }

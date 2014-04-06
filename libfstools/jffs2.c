@@ -27,7 +27,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 
-#include "../fs-state.h"
+#include "libfstools.h"
 #include "volume.h"
 
 #define SWITCH_JFFS2 "/tmp/.switch_jffs2"
@@ -156,113 +156,6 @@ handle_whiteout(const char *dir)
 	return 0;
 }
 
-static int
-ask_user(int argc, char **argv)
-{
-	if ((argc < 2) || strcmp(argv[1], "-y")) {
-		fprintf(stderr, "This will erase all settings and remove any installed packages. Are you sure? [N/y]\n");
-		if (getchar() != 'y')
-			return -1;
-	}
-	return 0;
-
-}
-
-static int
-handle_rmdir(const char *dir)
-{
-	struct stat s;
-	struct dirent **namelist;
-	int n;
-
-	n = scandir(dir, &namelist, NULL, NULL);
-
-	if (n < 1)
-		return -1;
-
-	while (n--) {
-		char file[256];
-
-		snprintf(file, sizeof(file), "%s%s", dir, namelist[n]->d_name);
-		if (!lstat(file, &s) && !S_ISDIR(s.st_mode))
-			unlink(file);
-		free(namelist[n]);
-	}
-	free(namelist);
-
-	rmdir(dir);
-
-	return 0;
-}
-
-static int
-jffs2_reset(int argc, char **argv)
-{
-	struct volume *v;
-	char *mp;
-
-	if (ask_user(argc, argv))
-		return -1;
-
-	if (find_filesystem("overlay")) {
-		fprintf(stderr, "overlayfs not found\n");
-		return -1;
-	}
-
-	v = volume_find("rootfs_data");
-	if (!v) {
-		fprintf(stderr, "no rootfs_data was found\n");
-		return -1;
-	}
-
-	mp = find_mount_point(v->blk, "jffs2");
-	if (mp) {
-		fprintf(stderr, "%s is mounted as %s, only erasing files\n", v->blk, mp);
-		foreachdir(mp, handle_rmdir);
-		mount(mp, "/", NULL, MS_REMOUNT, 0);
-	} else {
-		fprintf(stderr, "%s is not mounted, erasing it\n", v->blk);
-		volume_erase_all(v);
-	}
-
-	return 0;
-}
-
-static int
-jffs2_mark(int argc, char **argv)
-{
-	__u32 deadc0de = __cpu_to_be32(0xdeadc0de);
-	struct volume *v;
-	size_t sz;
-	int fd;
-
-	if (ask_user(argc, argv))
-		return -1;
-
-	v = volume_find("rootfs_data");
-	if (!v) {
-		fprintf(stderr, "no rootfs_data was found\n");
-		return -1;
-	}
-
-	fd = open(v->blk, O_WRONLY);
-	fprintf(stderr, "%s - marking with deadc0de\n", v->blk);
-	if (!fd) {
-		fprintf(stderr, "opening %s failed\n", v->blk);
-		return -1;
-	}
-
-	sz = write(fd, &deadc0de, sizeof(deadc0de));
-	close(fd);
-
-	if (sz != 1) {
-		fprintf(stderr, "writing %s failed: %s\n", v->blk, strerror(errno));
-		return -1;
-	}
-
-	return 0;
-}
-
 int
 jffs2_switch(int argc, char **argv)
 {
@@ -270,7 +163,7 @@ jffs2_switch(int argc, char **argv)
 	char *mp;
 	int ret = -1;
 
-	if (find_overlay_mount("overlayfs:/tmp/root"))
+	if (find_mount_overlay("overlayfs:/tmp/root"))
 		return -1;
 
 	if (find_filesystem("overlay")) {
@@ -313,7 +206,7 @@ jffs2_switch(int argc, char **argv)
 	return ret;
 }
 
-static int overlay_mount_fs(void)
+static int mount_overlay_fs(void)
 {
 	struct volume *v;
 
@@ -339,7 +232,7 @@ static int overlay_mount_fs(void)
 	return -1;
 }
 
-static int overlay_mount(void)
+int mount_overlay(void)
 {
 	struct volume *v = volume_find("rootfs_data");;
 	char *mp;
@@ -353,10 +246,10 @@ static int overlay_mount(void)
 		return -1;
 	}
 
-	overlay_mount_fs();
+	mount_overlay_fs();
 
 	extroot_prefix = "/tmp/overlay";
-	if (!backend_mount("extroot")) {
+	if (!mount_extroot()) {
 		fprintf(stderr, "fs-state: switched to extroot\n");
 		return 0;
 	}
@@ -369,20 +262,3 @@ static int overlay_mount(void)
 
 	return -1;
 }
-
-static struct backend_handler jffs2_handlers[] = {
-{
-	.name = "jffs2reset",
-	.cli = jffs2_reset,
-}, {
-	.name = "jffs2mark",
-	.cli = jffs2_mark,
-}};
-
-static struct backend overlay_backend = {
-	.name = "overlay",
-	.num_handlers = ARRAY_SIZE(jffs2_handlers),
-	.handlers = jffs2_handlers,
-	.mount = overlay_mount,
-};
-BACKEND(overlay_backend);

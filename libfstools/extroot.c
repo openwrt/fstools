@@ -20,11 +20,11 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
-#include "../fs-state.h"
+#include "libfstools.h"
 
 char const *extroot_prefix = NULL;
 
-static int mount_extroot(void)
+int mount_extroot(void)
 {
 	char block_path[32];
 	char kmod_loader[64];
@@ -93,9 +93,3 @@ static int mount_extroot(void)
 	}
 	return -1;
 }
-
-static struct backend extroot_backend = {
-	.name = "extroot",
-	.mount = mount_extroot,
-};
-BACKEND(extroot_backend);

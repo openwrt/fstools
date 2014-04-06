@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include <mtd/mtd-user.h>
 
-#include "../fs-state.h"
+#include "libfstools.h"
 
 #include "volume.h"
 

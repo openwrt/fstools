@@ -27,7 +27,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 
-#include "../fs-state.h"
+#include "libfstools.h"
 #include "volume.h"
 
 #define SWITCH_JFFS2 "/tmp/.switch_jffs2"
@@ -142,18 +142,6 @@ handle_whiteout(const char *dir)
 	return 0;
 }
 
-static int
-ask_user(int argc, char **argv)
-{
-	if ((argc < 2) || strcmp(argv[1], "-y")) {
-		fprintf(stderr, "This will erase all settings and remove any installed packages. Are you sure? [N/y]\n");
-		if (getchar() != 'y')
-			return -1;
-	}
-	return 0;
-
-}
-
 int
 jffs2_switch(int argc, char **argv)
 {
@@ -182,7 +170,7 @@ jffs2_switch(int argc, char **argv)
 		/* fall through */
 
 	case FS_DEADCODE:
-		ret = switch2jffs();
+		ret = switch2jffs(v);
 		if (!ret) {
 			fprintf(stderr, "doing fo cleanup\n");
 			umount2("/tmp/root", MNT_DETACH);
@@ -230,7 +218,7 @@ static int overlay_mount_fs(void)
 	return -1;
 }
 
-static int overlay_mount(void)
+int mount_overlay(void)
 {
 	struct volume *v = volume_find("rootfs_data");;
 	char *mp;
@@ -247,8 +235,8 @@ static int overlay_mount(void)
 	overlay_mount_fs();
 
 	extroot_prefix = "/tmp/overlay";
-	if (!backend_mount("extroot")) {
-		fprintf(stderr, "fs-state: switched to extroot\n");
+	if (!mount_extroot()) {
+		fprintf(stderr, "switched to extroot\n");
 		return 0;
 	}
 
@@ -260,9 +248,3 @@ static int overlay_mount(void)
 
 	return -1;
 }
-
-static struct backend overlay_backend = {
-	.name = "overlay",
-	.mount = overlay_mount,
-};
-BACKEND(overlay_backend);

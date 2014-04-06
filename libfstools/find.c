@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "../fs-state.h"
+#include "libfstools.h"
 
 int
 find_overlay_mount(char *overlay)

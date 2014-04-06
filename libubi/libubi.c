@@ -861,7 +861,7 @@ int ubi_remove_dev(libubi_t desc, const char *node, int ubi_dev)
 		sys_errmsg("cannot open \"%s\"", node);
 		return -1;
 	}
-	ret = ioctl(fd, UBI_IOCDET, &ubi_dev);
+	ret = ioctl(fd, UBI_IOCFDET, &ubi_dev);
 	if (ret == -1)
 		goto out_close;
 

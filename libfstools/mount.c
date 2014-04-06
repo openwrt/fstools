@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <string.h>
 
-#include "../fs-state.h"
+#include "libfstools.h"
 
 /* this is a raw syscall - man 2 pivot_root */
 extern int pivot_root(const char *new_root, const char *put_old);

@@ -1,6 +1,11 @@
+jffs2reset
+mount_root
+snapshot_tool
 ubi
 block
 fs-state
+*.so
+*.a
 .*
 Makefile
 CMakeCache.txt
