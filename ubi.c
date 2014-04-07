@@ -166,7 +166,7 @@ static int main_image(char *partition, char *image, char *overlay)
 
 	err = ubiattach(libubi, mtd);
 	if (err) {
-		fprintf(stderr, "cannot detach \"%s\"", mtd);
+		fprintf(stderr, "cannot attach \"%s\"", mtd);
 		return -1;
 	}
 
@@ -244,9 +244,9 @@ static int main_info(void)
 static int print_usage(void)
 {
 	printf("ubi info\n");
-	printf("ubi kernel <image.kernel.ubi>\n");
-	printf("ubi rootfs <image.rootfs.ubi>\n");
-	printf("ubi overlay <image.rootfs-overlay.ubi>\n");
+	printf("ubi kernel <image.kernel.ubifs>\n");
+	printf("ubi rootfs <image.rootfs.ubifs>\n");
+	printf("ubi overlay <image.rootfs-overlay.ubifs>\n");
 
 	return -1;
 }
