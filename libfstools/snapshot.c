@@ -32,71 +32,9 @@
 
 #include "libfstools.h"
 #include "volume.h"
+#include "snapshot.h"
 
-#define PATH_MAX	256
-#define OWRT		0x4f575254
-#define DATA		0x44415441
-#define CONF		0x434f4e46
-
-struct file_header {
-	uint32_t magic;
-	uint32_t type;
-	uint32_t seq;
-	uint32_t length;
-	uint32_t md5[4];
-};
-
-static inline int
-is_config(struct file_header *h)
-{
-	return ((h->magic == OWRT) && (h->type == CONF));
-}
-
-static inline int
-valid_file_size(int fs)
-{
-	if ((fs > 8 * 1024 * 1204) || (fs <= 0))
-		return -1;
-
-	return 0;
-}
-
-static void
-hdr_to_be32(struct file_header *hdr)
-{
-	uint32_t *h = (uint32_t *) hdr;
-	int i;
-
-	for (i = 0; i < sizeof(struct file_header) / sizeof(uint32_t); i++)
-		h[i] = cpu_to_be32(h[i]);
-}
-
-static void
-be32_to_hdr(struct file_header *hdr)
-{
-	uint32_t *h = (uint32_t *) hdr;
-	int i;
-
-	for (i = 0; i < sizeof(struct file_header) / sizeof(uint32_t); i++)
-		h[i] = be32_to_cpu(h[i]);
-}
-
-static int
-pad_file_size(struct volume *v, int size)
-{
-	int mod;
-
-	size += sizeof(struct file_header);
-	mod = size % v->block_size;
-	if (mod) {
-		size -= mod;
-		size += v->block_size;
-	}
-
-	return size;
-}
-
-static int
+int
 verify_file_hash(char *file, uint32_t *hash)
 {
 	uint32_t md5[4];
@@ -114,7 +52,7 @@ verify_file_hash(char *file, uint32_t *hash)
 	return 0;
 }
 
-static int
+int
 snapshot_next_free(struct volume *v, uint32_t *seq)
 {
 	struct file_header hdr = { 0 };
@@ -144,7 +82,7 @@ snapshot_next_free(struct volume *v, uint32_t *seq)
 	return block;
 }
 
-static int
+int
 config_find(struct volume *v, struct file_header *conf, struct file_header *sentinel)
 {
 	uint32_t seq;
@@ -172,7 +110,7 @@ config_find(struct volume *v, struct file_header *conf, struct file_header *sent
 	return -1;
 }
 
-static int
+int
 snapshot_write_file(struct volume *v, int block, char *file, uint32_t seq, uint32_t type)
 {
 	uint32_t md5[4] = { 0 };
@@ -229,7 +167,7 @@ out:
 	return ret;
 }
 
-static int
+int
 snapshot_read_file(struct volume *v, int block, char *file, uint32_t type)
 {
 	struct file_header hdr;
@@ -257,15 +195,18 @@ snapshot_read_file(struct volume *v, int block, char *file, uint32_t type)
 		return -1;
 	}
 
+	offset = block * v->block_size + sizeof(hdr);
+
 	while (hdr.length > 0) {
 		int len = sizeof(buffer);
 
 		if (hdr.length < len)
 			len = hdr.length;
 
-		if ((volume_read(v, buffer, offset, len) != len) || (write(out, buffer, len) != len))
+		if (volume_read(v, buffer, offset, len))
 			return -1;
-
+		if (write(out, buffer, len) != len)
+			return -1;
 		offset += len;
 		hdr.length -= len;
 	}
@@ -283,7 +224,7 @@ snapshot_read_file(struct volume *v, int block, char *file, uint32_t type)
 	return block;
 }
 
-static int
+int
 sentinel_write(struct volume *v, uint32_t _seq)
 {
 	int ret, block;
@@ -311,7 +252,7 @@ sentinel_write(struct volume *v, uint32_t _seq)
 	return ret;
 }
 
-static int
+int
 volatile_write(struct volume *v, uint32_t _seq)
 {
 	int block, ret;

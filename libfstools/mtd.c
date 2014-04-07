@@ -170,6 +170,11 @@ static int mtd_volume_find(struct volume *v, char *name)
 	snprintf(buffer, sizeof(buffer), "/dev/mtd%s", idx);
 	p->chr = strdup(buffer);
 
+	if (mtd_volume_load(v)) {
+		fprintf(stderr, "reading %s failed\n", v->name);
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -192,7 +197,7 @@ static int mtd_volume_identify(struct volume *v)
 		return -1;
 	}
 
-	if (deadc0de == 0x4f575254)
+	if (deadc0de == __be32_to_cpu(0x4f575254))
 		return FS_SNAPSHOT;
 
 	deadc0de = __be32_to_cpu(deadc0de);
