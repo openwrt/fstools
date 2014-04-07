@@ -124,7 +124,7 @@ jffs2_mark(int argc, char **argv)
 	sz = write(fd, &deadc0de, sizeof(deadc0de));
 	close(fd);
 
-	if (sz != 1) {
+	if (sz != 4) {
 		fprintf(stderr, "writing %s failed: %s\n", v->blk, strerror(errno));
 		return -1;
 	}
