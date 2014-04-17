@@ -26,6 +26,7 @@ char const *extroot_prefix = NULL;
 
 int mount_extroot(void)
 {
+	char ldlib_path[32];
 	char block_path[32];
 	char kmod_loader[64];
 	struct stat s;
@@ -34,6 +35,7 @@ int mount_extroot(void)
 	if (!extroot_prefix)
 		return -1;
 
+	sprintf(ldlib_path, "%s/lib", extroot_prefix);
 	sprintf(block_path, "%s/sbin/block", extroot_prefix);
 
 	if (stat(block_path, &s))
@@ -45,6 +47,7 @@ int mount_extroot(void)
 	pid = fork();
 	if (!pid) {
 		mkdir("/tmp/extroot", 0755);
+		setenv("LD_LIBRARY_PATH", ldlib_path, 1);
 		execl(block_path, block_path, "extroot", NULL);
 		exit(-1);
 	} else if (pid > 0) {
