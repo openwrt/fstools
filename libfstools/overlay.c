@@ -187,14 +187,24 @@ jffs2_switch(int argc, char **argv)
 			ret = -1;
 		}
 		break;
-	}
 
+	case FS_UBIFS:
+		ret = overlay_mount(v, "ubifs");
+		if (ret)
+			break;
+			if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
+			fprintf(stderr, "switching to ubifs failed\n");
+			ret = -1;
+		}
+		break;
+	}
 	return ret;
 }
 
 static int overlay_mount_fs(void)
 {
 	struct volume *v;
+	char *fstype;
 
 	if (mkdir("/tmp/overlay", 0755)) {
 		fprintf(stderr, "failed to mkdir /tmp/overlay: %s\n", strerror(errno));
@@ -207,9 +217,17 @@ static int overlay_mount_fs(void)
 		return -1;
 	}
 
-	if (mount(v->blk, "/tmp/overlay", "jffs2", MS_NOATIME, NULL)) {
-		fprintf(stderr, "failed to mount -t jffs2 %s /tmp/overlay: %s\n",
-				v->blk, strerror(errno));
+	fstype = "jffs2";
+
+	switch (volume_identify(v)) {
+	case FS_UBIFS:
+		fstype = "ubifs";
+		break;
+	}
+
+	if (mount(v->blk, "/tmp/overlay", fstype, MS_NOATIME, NULL)) {
+		fprintf(stderr, "failed to mount -t %s %s /tmp/overlay: %s\n",
+				fstype, v->blk, strerror(errno));
 		return -1;
 	}
 
@@ -240,7 +258,7 @@ int mount_overlay(void)
 		return 0;
 	}
 
-	fprintf(stderr, "switching to jffs2\n");
+	fprintf(stderr, "switching to overlay\n");
 	if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
 		fprintf(stderr, "switching to jffs2 failed - fallback to ramoverlay\n");
 		return ramoverlay();

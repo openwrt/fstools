@@ -29,8 +29,7 @@ typedef int (*volume_erase_t)(struct volume *v, int start, int len);
 typedef int (*volume_erase_all_t)(struct volume *v);
 
 struct driver {
-        struct list_head        list;
-
+	struct list_head	list;
 	char			*name;
 	volume_probe_t		probe;
 	volume_init_t		init;

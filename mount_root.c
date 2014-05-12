@@ -46,6 +46,7 @@ start(int argc, char *argv[1])
 		return ramoverlay();
 
 	case FS_JFFS2:
+	case FS_UBIFS:
 		mount_overlay();
 		break;
 

@@ -22,6 +22,7 @@ enum {
 	FS_SNAPSHOT,
 	FS_JFFS2,
 	FS_DEADCODE,
+	FS_UBIFS,
 };
 
 extern char const *extroot_prefix;
