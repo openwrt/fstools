@@ -93,7 +93,7 @@ test_open(char *filename)
 
 static int ubi_volume_init(struct volume *v)
 {
-	char voldir[40], voldev[32], *volname, *voltype;
+	char voldir[40], voldev[32], *volname;
 	struct ubi_priv *p;
 	unsigned int volsize;
 
