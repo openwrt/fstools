@@ -130,7 +130,9 @@ static char* mtd_find_index(char *name)
 		return index;
 
 	while (!index && fgets(line, sizeof(line), fp)) {
-		if (strstr(line, name)) {
+		char *ret;
+
+		if ((ret = strstr(line, name)) && (ret[strlen(name)] == '"')) {
 			char *eol = strstr(line, ":");
 
 			if (!eol)
