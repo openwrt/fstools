@@ -23,6 +23,17 @@
 
 #include "libubi/libubi-tiny.h"
 
+static int print_usage(void)
+{
+	printf("ubi info\n");
+	printf("ubi detach kernel|rootfs\n");
+	printf("ubi kernel <image.kernel.ubi>\n");
+	printf("ubi rootfs <image.rootfs.ubi>\n");
+	printf("ubi overlay <image.rootfs-overlay.ubi>\n");
+
+	return -1;
+}
+
 static int mtd_find_index(char *name)
 {
 	FILE *fp = fopen("/proc/mtd", "r");
@@ -68,31 +79,22 @@ static int ubi_find(libubi_t libubi, char *name, char *ret)
 	int index = mtd_find_index(name);
 	int ubi = 0;
 
-	if (index < 0)
-		return -1;
+	while (ubi_dev_present(libubi, ubi))
+	{
+		struct ubi_dev_info info;
 
-	if (mtd_num2ubi_dev(libubi, index, &ubi)) {
-		fprintf(stderr, "failed to get ubi node for %s\n", name);
-		return -1;
+		if (ubi_get_dev_info1(libubi, ubi++, &info))
+			continue;
+
+		if (info.mtd_num != index)
+			continue;
+
+		sprintf(ret, "/dev/ubi%d", info.dev_num);
+
+		return 0;
 	}
-	sprintf(ret, "/dev/ubi%d", ubi);
 
-	return 0;
-}
-
-static int ubi_find_mtd(libubi_t libubi, char *name, char *ret)
-{
-	struct ubi_dev_info info;
-
-	if (ubi_find(libubi, name, ret))
-		return -1;
-
-	if (ubi_get_dev_info(libubi, ret, &info))
-		return -1;
-
-	sprintf(ret, "/dev/mtd%d", info.mtd_num);
-
-	return 0;
+	return -1;
 }
 
 static int volume_find(libubi_t libubi, char *name, char *ret)
@@ -119,21 +121,61 @@ static int volume_find(libubi_t libubi, char *name, char *ret)
 	return 0;
 }
 
+static int main_detach(char *type)
+{
+	libubi_t libubi;
+	char mtd[64];
+	int err;
+
+	if (!strcmp(type, "kernel"))
+		err = mtd_find("kernel_ubi", mtd);
+	else if (!strcmp(type, "rootfs"))
+		err = mtd_find("rootfs_ubi", mtd);
+	else
+		return print_usage();
+
+	if (err) {
+		fprintf(stderr, "failed to find mtd partition %s_ubi\n", type);
+		return -1;
+	}
+
+	libubi = libubi_open();
+	if (!libubi) {
+		fprintf(stderr, "cannot open libubi");
+		return -1;
+	}
+
+	err = ubidetach(libubi, mtd);
+	if (err) {
+		fprintf(stderr, "cannot detach \"%s\"", mtd);
+		return -1;
+	}
+
+	return 0;
+}
+
 static int main_image(char *partition, char *image, char *overlay)
 {
 	libubi_t libubi;
+	struct stat s;
 	int err;
 	char mtd[64];
-	char part[64];
+	char _part[64];
 	char node[64];
 	char volume[64];
 	char _data[64];
 	char *data = NULL;
 
-	if (mtd_find(partition, part)) {
-		fprintf(stderr, "failed to find mtd partition %s\n", partition);
+	if (stat(image, &s)) {
+		fprintf(stderr, "image not found %s\n", image);
 		return -1;
 	}
+
+	if (!strcmp(partition, "kernel"))
+		err = mtd_find("kernel", _part);
+	else
+		err = mtd_find("rootfs", _part);
+
 	if (overlay && !mtd_find(overlay, _data))
 		data = _data;
 
@@ -143,17 +185,20 @@ static int main_image(char *partition, char *image, char *overlay)
 		return -1;
 	}
 
-	if (ubi_find_mtd(libubi, partition, mtd)) {
-		fprintf(stderr, "failed to find mtd parent %s\n", partition);
+	if (!strcmp(partition, "kernel"))
+		err = mtd_find("kernel_ubi", mtd);
+	else
+		err = mtd_find("rootfs_ubi", mtd);
+	if (err) {
+		fprintf(stderr, "failed to find mtd parent %s_ubi\n", partition);
 		return -1;
 	}
 
-	if (ubi_find(libubi, partition, node)) {
-		fprintf(stderr, "failed to find ubi volume %s\n", partition);
-		return -1;
-	}
-
-	if (volume_find(libubi, partition, volume)) {
+	if (!strcmp(partition, "kernel"))
+		err = ubi_find(libubi, "kernel_ubi", node);
+	else
+		err = ubi_find(libubi, "rootfs_ubi", node);
+	if (err) {
 		fprintf(stderr, "failed to find ubi volume %s\n", partition);
 		return -1;
 	}
@@ -178,6 +223,17 @@ static int main_image(char *partition, char *image, char *overlay)
 		}
 	}
 
+	if (volume_find(libubi, partition, volume) < 0) {
+		fprintf(stderr, "failed to find ubi volume %s\n", partition);
+		return -1;
+	}
+
+	err = ubirsvol(libubi, node, partition, s.st_size);
+	if (err) {
+		fprintf(stderr, "cannot resize \"%s\"", partition);
+		return -1;
+	}
+
 	err = ubiupdatevol(libubi, volume, image);
 	if (err) {
 		fprintf(stderr, "cannot update \"%s\"", volume);
@@ -187,7 +243,7 @@ static int main_image(char *partition, char *image, char *overlay)
 	if (overlay) {
 		err = ubimkvol(libubi, node, overlay, 1);
 		if (err) {
-			fprintf(stderr, "cannot make \"%s\"", node);
+			fprintf(stderr, "cannot make \"%s\"", overlay);
 			return -1;
 		}
 	}
@@ -241,16 +297,6 @@ static int main_info(void)
 	return 0;
 }
 
-static int print_usage(void)
-{
-	printf("ubi info\n");
-	printf("ubi kernel <image.kernel.ubifs>\n");
-	printf("ubi rootfs <image.rootfs.ubifs>\n");
-	printf("ubi overlay <image.rootfs-overlay.ubifs>\n");
-
-	return -1;
-}
-
 int main(int argc, char **argv)
 {
 	if (argc > 1 && !strcmp(argv[1], "info"))
@@ -267,6 +313,9 @@ int main(int argc, char **argv)
 
 	} else if (!strcmp(argv[1], "overlay")) {
 		return main_image("rootfs", argv[2], "rootfs_data");
+
+	} else if (!strcmp(argv[1], "detach")) {
+		return main_detach(argv[2]);
 	}
 
 	return -1;
