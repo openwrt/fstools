@@ -180,6 +180,9 @@ static int ubi_volume_find(struct volume *v, char *name)
 	unsigned int ubi_num;
 	int ret = -1;
 
+	if (find_filesystem("ubifs"))
+		return ret;
+
 	ubi_dir = opendir(ubi_dir_name);
 	/* check for os ubi support */
 	if (!ubi_dir)
