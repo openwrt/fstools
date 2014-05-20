@@ -33,6 +33,15 @@ ADD_LIBRARY(ubi-utils STATIC
 		libubi/libubi.c
 		libubi/libubi-tiny.c
 		libubi/ubiutils-common.c)
+INSTALL(TARGETS ubi-utils ARCHIVE DESTINATION lib)
+
+SET_TARGET_PROPERTIES(ubi-utils PROPERTIES COMPILE_FLAGS
+		"-ffunction-sections -fdata-sections")
+
+INSTALL(FILES libubi/libubi-tiny.h libubi/libubi.h libubi/ubi-media.h
+		libubi/ubi-user.h libubi/ubi-media.h
+	DESTINATION include
+)
 
 ADD_EXECUTABLE(mount_root mount_root.c)
 TARGET_LINK_LIBRARIES(mount_root fstools)
