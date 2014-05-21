@@ -192,7 +192,7 @@ jffs2_switch(int argc, char **argv)
 		ret = overlay_mount(v, "ubifs");
 		if (ret)
 			break;
-			if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
+		if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
 			fprintf(stderr, "switching to ubifs failed\n");
 			ret = -1;
 		}
