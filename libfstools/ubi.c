@@ -138,7 +138,7 @@ static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volid
 
 	volname = read_string_from_file(voldir, "name");
 
-	if (strncmp(name, volname, strlen(volname)))
+	if (strncmp(name, volname, strlen(volname) + 1))
 		return -1;
 
 	p = calloc(1, sizeof(struct ubi_priv));
