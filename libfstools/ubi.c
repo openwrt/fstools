@@ -19,9 +19,12 @@
 #include "libfstools.h"
 #include "volume.h"
 
+/* fit for UBI_MAX_VOLUME_NAME and sysfs path lengths */
+#define BUFLEN		128
+
 /* could use libubi-tiny instead, but already had the code directly reading
  * from sysfs */
-char *ubi_dir_name = "/sys/devices/virtual/ubi";
+const char const *ubi_dir_name = "/sys/devices/virtual/ubi";
 
 struct ubi_priv {
 	int		ubi_num;
@@ -30,11 +33,11 @@ struct ubi_priv {
 
 static struct driver ubi_driver;
 
-static unsigned int
+static int
 read_uint_from_file(char *dirname, char *filename, unsigned int *i)
 {
 	FILE *f;
-	char fname[128];
+	char fname[BUFLEN];
 	int ret = -1;
 
 	snprintf(fname, sizeof(fname), "%s/%s", dirname, filename);
@@ -54,10 +57,9 @@ static char
 *read_string_from_file(char *dirname, char *filename)
 {
 	FILE *f;
-	char fname[128];
-	char buf[128];
+	char fname[BUFLEN];
+	char buf[BUFLEN];
 	int i;
-	char *str;
 
 	snprintf(fname, sizeof(fname), "%s/%s", dirname, filename);
 
@@ -65,17 +67,20 @@ static char
 	if (!f)
 		return NULL;
 
-	if (fgets(buf, 128, f) == NULL)
+	if (fgets(buf, sizeof(buf), f) == NULL)
 		return NULL;
 
-	i = strlen(buf);
-	do
-		buf[i--]='\0';
-	while (buf[i] == '\n');
-
-	str = strdup(buf);
 	fclose(f);
-	return str;
+
+	/* make sure the string is \0 terminated */
+	buf[sizeof(buf) - 1] = '\0';
+
+	/* remove trailing whitespace */
+	i = strlen(buf) - 1;
+	while (i > 0 && buf[i] <= ' ')
+		buf[i--] = '\0';
+
+	return strdup(buf);
 }
 
 static unsigned int
@@ -93,7 +98,7 @@ test_open(char *filename)
 
 static int ubi_volume_init(struct volume *v)
 {
-	char voldir[40], voldev[32], *volname;
+	char voldir[BUFLEN], voldev[BUFLEN], *volname;
 	struct ubi_priv *p;
 	unsigned int volsize;
 
@@ -120,10 +125,9 @@ static int ubi_volume_init(struct volume *v)
 	return 0;
 }
 
-
 static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volidx)
 {
-	char voldir[40], volblkdev[40], *volname;
+	char voldir[BUFLEN], volblkdev[BUFLEN], *volname;
 	struct ubi_priv *p;
 
 	snprintf(voldir, sizeof(voldir), "%s/ubi%u/ubi%u_%u",
@@ -135,6 +139,8 @@ static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volid
 	/* skip if ubiblock device exists */
 	if (test_open(volblkdev))
 		return -1;
+
+	/* todo: skip existing gluebi device for legacy support */
 
 	volname = read_string_from_file(voldir, "name");
 
@@ -156,7 +162,7 @@ static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volid
 static int ubi_part_match(struct volume *v, char *name, unsigned int ubi_num)
 {
 	unsigned int i, volumes_count;
-	char devdir[80];
+	char devdir[BUFLEN];
 
 	snprintf(devdir, sizeof(devdir), "%s/ubi%u",
 		ubi_dir_name, ubi_num);
@@ -205,6 +211,7 @@ static int ubi_volume_find(struct volume *v, char *name)
 
 static int ubi_volume_identify(struct volume *v)
 {
+	/* Todo: use libblkid-tiny on the ubi chardev */
 	return FS_UBIFS;
 }
 
