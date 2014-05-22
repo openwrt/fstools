@@ -24,11 +24,11 @@
 
 /* could use libubi-tiny instead, but already had the code directly reading
  * from sysfs */
-const char const *ubi_dir_name = "/sys/devices/virtual/ubi";
+const char *const ubi_dir_name = "/sys/devices/virtual/ubi";
 
 struct ubi_priv {
 	int		ubi_num;
-	int		ubi_volidx;
+	int		ubi_volid;
 };
 
 static struct driver ubi_driver;
@@ -105,10 +105,10 @@ static int ubi_volume_init(struct volume *v)
 	p = (struct ubi_priv*)v->priv;
 
 	snprintf(voldir, sizeof(voldir), "%s/ubi%u/ubi%u_%u",
-		ubi_dir_name, p->ubi_num, p->ubi_num, p->ubi_volidx);
+		ubi_dir_name, p->ubi_num, p->ubi_num, p->ubi_volid);
 
 	snprintf(voldev, sizeof(voldev), "/dev/ubi%u_%u",
-		p->ubi_num, p->ubi_volidx);
+		p->ubi_num, p->ubi_volid);
 
 	volname = read_string_from_file(voldir, "name");
 	if (!volname)
@@ -125,16 +125,16 @@ static int ubi_volume_init(struct volume *v)
 	return 0;
 }
 
-static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volidx)
+static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volid)
 {
 	char voldir[BUFLEN], volblkdev[BUFLEN], *volname;
 	struct ubi_priv *p;
 
 	snprintf(voldir, sizeof(voldir), "%s/ubi%u/ubi%u_%u",
-		ubi_dir_name, ubi_num, ubi_num, volidx);
+		ubi_dir_name, ubi_num, ubi_num, volid);
 
 	snprintf(volblkdev, sizeof(volblkdev), "/dev/ubiblock%u_%u",
-		ubi_num, volidx);
+		ubi_num, volid);
 
 	/* skip if ubiblock device exists */
 	if (test_open(volblkdev))
@@ -154,7 +154,7 @@ static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volid
 	v->priv = p;
 	v->drv = &ubi_driver;
 	p->ubi_num = ubi_num;
-	p->ubi_volidx = volidx;
+	p->ubi_volid = volid;
 
 	return ubi_volume_init(v);
 }
