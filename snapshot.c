@@ -25,6 +25,7 @@
 #include <libgen.h>
 #include <unistd.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include <libubox/list.h>
 #include <libubox/blob.h>
@@ -149,7 +150,7 @@ snapshot_read(int argc, char **argv)
 	if (argc > 2) {
 		block = atoi(argv[2]);
 		if (block >= (v->size / v->block_size)) {
-			fprintf(stderr, "invalid block %d > %llu\n", block, v->size / v->block_size);
+			fprintf(stderr, "invalid block %d > %" PRId64 "\n", block, v->size / v->block_size);
 			goto out;
 		}
 		snprintf(file, sizeof(file), "/tmp/snapshot/block%d.tar.gz", block);
@@ -177,7 +178,7 @@ snapshot_info(void)
 	if (!v)
 		return -1;
 
-	fprintf(stderr, "sectors:\t%llu, block_size:\t%dK\n", v->size / v->block_size, v->block_size / 1024);
+	fprintf(stderr, "sectors:\t%" PRId64 ", block_size:\t%dK\n", v->size / v->block_size, v->block_size / 1024);
 	do {
 		if (volume_read(v, &hdr, block * v->block_size, sizeof(struct file_header))) {
 			fprintf(stderr, "scanning for next free block failed\n");
