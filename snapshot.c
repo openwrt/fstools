@@ -150,7 +150,8 @@ snapshot_read(int argc, char **argv)
 	if (argc > 2) {
 		block = atoi(argv[2]);
 		if (block >= (v->size / v->block_size)) {
-			fprintf(stderr, "invalid block %d > %" PRId64 "\n", block, v->size / v->block_size);
+			fprintf(stderr, "invalid block %d > %" PRIu64 "\n",
+				block, (uint64_t) v->size / v->block_size);
 			goto out;
 		}
 		snprintf(file, sizeof(file), "/tmp/snapshot/block%d.tar.gz", block);
@@ -178,7 +179,8 @@ snapshot_info(void)
 	if (!v)
 		return -1;
 
-	fprintf(stderr, "sectors:\t%" PRId64 ", block_size:\t%dK\n", v->size / v->block_size, v->block_size / 1024);
+	fprintf(stderr, "sectors:\t%" PRIu64 ", block_size:\t%dK\n",
+		(uint64_t) v->size / v->block_size, v->block_size / 1024);
 	do {
 		if (volume_read(v, &hdr, block * v->block_size, sizeof(struct file_header))) {
 			fprintf(stderr, "scanning for next free block failed\n");
