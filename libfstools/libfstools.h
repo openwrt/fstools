@@ -37,7 +37,7 @@ extern int ramoverlay(void);
 
 extern int find_overlay_mount(char *overlay);
 extern char* find_mount(char *mp);
-extern char* find_mount_point(char *block, char *fs);
+extern char* find_mount_point(char *block, int mtd_only);
 extern int find_filesystem(char *fs);
 extern int find_mtd_block(char *name, char *part, int plen);
 extern int find_mtd_char(char *name, char *part, int plen);

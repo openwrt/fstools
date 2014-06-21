@@ -73,7 +73,7 @@ find_mount(char *mp)
 }
 
 char*
-find_mount_point(char *block, char *fs)
+find_mount_point(char *block, int mtd_only)
 {
 	FILE *fp = fopen("/proc/mounts", "r");
 	static char line[256];
@@ -96,7 +96,9 @@ find_mount_point(char *block, char *fs)
 			*t = '\0';
 			t++;
 
-			if (fs && strncmp(t, fs, strlen(fs))) {
+			if (mtd_only &&
+			    strncmp(t, "jffs2", 6) &&
+			    strncmp(t, "ubifs", 6)) {
 				fclose(fp);
 				fprintf(stderr, "block is mounted with wrong fs\n");
 				return NULL;

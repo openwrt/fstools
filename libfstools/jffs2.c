@@ -172,7 +172,7 @@ jffs2_switch(int argc, char **argv)
 	}
 
 	v = volume_find("rootfs_data");
-	mp = find_mount_point(v->blk, NULL);
+	mp = find_mount_point(v->blk, 0);
 	if (mp) {
 		fprintf(stderr, "rootfs_data:%s is already mounted as %s\n", v->blk, mp);
 		return -1;
@@ -240,7 +240,7 @@ int mount_overlay(void)
 	if (!v)
 		return -1;
 
-	mp = find_mount_point(v->blk, NULL);
+	mp = find_mount_point(v->blk, 0);
 	if (mp) {
 		fprintf(stderr, "rootfs_data:%s is already mounted as %s\n", v->blk, mp);
 		return -1;

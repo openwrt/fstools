@@ -84,7 +84,7 @@ jffs2_reset(int argc, char **argv)
 		return -1;
 	}
 
-	mp = find_mount_point(v->blk, "jffs2");
+	mp = find_mount_point(v->blk, 1);
 	if (mp) {
 		fprintf(stderr, "%s is mounted as %s, only erasing files\n", v->blk, mp);
 		foreachdir(mp, handle_rmdir);
