@@ -90,11 +90,35 @@ fopivot(char *rw_root, char *ro_root)
 	}
 
 	snprintf(overlay, sizeof(overlay), "overlayfs:%s", rw_root);
-	snprintf(lowerdir, sizeof(lowerdir), "lowerdir=/,upperdir=%s", rw_root);
 
+	/*
+	 * First, try to mount without a workdir, for overlayfs v22 and before.
+	 * If it fails, it means that we are probably using a v23 and
+	 * later versions that require a workdir
+	 */
+	snprintf(lowerdir, sizeof(lowerdir), "lowerdir=/,upperdir=%s", rw_root);
 	if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, lowerdir)) {
-		fprintf(stderr, "mount failed: %s\n", strerror(errno));
-		return -1;
+		char upperdir[64], workdir[64];
+
+		snprintf(upperdir, sizeof(upperdir), "%s/upper", rw_root);
+		snprintf(workdir, sizeof(workdir), "%s/work", rw_root);
+		snprintf(lowerdir, sizeof(lowerdir), "lowerdir=/,upperdir=%s,workdir=%s",
+			 upperdir, workdir);
+
+		/*
+		 * Overlay FS v23 and later requires both a upper and
+		 * a work directory, both on the same filesystem, but
+		 * not part of the same subtree.
+		 * We can't really deal with these constraints without
+		 * creating two new subdirectories in /overlay.
+		 */
+		mkdir(upperdir, 0755);
+		mkdir(workdir, 0755);
+
+		if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, lowerdir)) {
+			fprintf(stderr, "mount failed: %s, options %s\n", strerror(errno), lowerdir);
+			return -1;
+		}
 	}
 
 	return pivot("/mnt", ro_root);
