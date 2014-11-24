@@ -115,9 +115,13 @@ fopivot(char *rw_root, char *ro_root)
 		mkdir(upperdir, 0755);
 		mkdir(workdir, 0755);
 
-		if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, lowerdir)) {
-			fprintf(stderr, "mount failed: %s, options %s\n", strerror(errno), lowerdir);
-			return -1;
+		/* Mainlined overlayfs has been renamed to "overlay", try that first */
+		if (mount(overlay, "/mnt", "overlay", MS_NOATIME, lowerdir)) {
+			if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, lowerdir)) {
+				fprintf(stderr, "mount failed: %s, options %s\n",
+					strerror(errno), lowerdir);
+				return -1;
+			}
 		}
 	}
 
