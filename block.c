@@ -354,7 +354,7 @@ static struct mount* find_swap(const char *uuid, const char *label, const char *
 	vlist_for_each_element(&mounts, m, node) {
 		if (m->type != TYPE_SWAP)
 			continue;
-		if (uuid && m->uuid && !strcmp(m->uuid, uuid))
+		if (uuid && m->uuid && !strcasecmp(m->uuid, uuid))
 			return m;
 		if (label && m->label && !strcmp(m->label, label))
 			return m;
@@ -373,7 +373,7 @@ static struct mount* find_block(const char *uuid, const char *label, const char 
 	vlist_for_each_element(&mounts, m, node) {
 		if (m->type != TYPE_MOUNT)
 			continue;
-		if (m->uuid && uuid && !strcmp(m->uuid, uuid))
+		if (m->uuid && uuid && !strcasecmp(m->uuid, uuid))
 			return m;
 		if (m->label && label && !strcmp(m->label, label))
 			return m;
@@ -529,7 +529,7 @@ static struct blkid_struct_probe* find_block_info(char *uuid, char *label, char 
 
 	if (uuid)
 		list_for_each_entry(pr, &devices, list)
-			if (!strcmp(pr->uuid, uuid))
+			if (!strcasecmp(pr->uuid, uuid))
 				return pr;
 
 	if (label)
@@ -859,7 +859,7 @@ static int check_extroot(char *path)
 
 			fgets(uuid, sizeof(uuid), fp);
 			fclose(fp);
-			if (!strcmp(uuid, pr->uuid))
+			if (!strcasecmp(uuid, pr->uuid))
 				return 0;
 			ERROR("extroot: uuid tag does not match rom uuid\n");
 		}
