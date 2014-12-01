@@ -98,10 +98,13 @@ fopivot(char *rw_root, char *ro_root)
 	 */
 	snprintf(lowerdir, sizeof(lowerdir), "lowerdir=/,upperdir=%s", rw_root);
 	if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, lowerdir)) {
-		char upperdir[64], workdir[64];
+		char upperdir[64], workdir[64], upgrade[64], upgrade_dest[64];
+		struct stat st;
 
 		snprintf(upperdir, sizeof(upperdir), "%s/upper", rw_root);
 		snprintf(workdir, sizeof(workdir), "%s/work", rw_root);
+		snprintf(upgrade, sizeof(upgrade), "%s/sysupgrade.tgz", rw_root);
+		snprintf(upgrade_dest, sizeof(upgrade_dest), "%s/sysupgrade.tgz", upperdir);
 		snprintf(lowerdir, sizeof(lowerdir), "lowerdir=/,upperdir=%s,workdir=%s",
 			 upperdir, workdir);
 
@@ -114,6 +117,9 @@ fopivot(char *rw_root, char *ro_root)
 		 */
 		mkdir(upperdir, 0755);
 		mkdir(workdir, 0755);
+
+		if (stat(upgrade, &st) == 0)
+		    rename(upgrade, upgrade_dest);
 
 		/* Mainlined overlayfs has been renamed to "overlay", try that first */
 		if (mount(overlay, "/mnt", "overlay", MS_NOATIME, lowerdir)) {
