@@ -273,15 +273,11 @@ volatile_write(struct volume *v, uint32_t _seq)
 }
 
 static int
-snapshot_sync(void)
+snapshot_sync(struct volume *v)
 {
-	struct volume *v = volume_find("rootfs_data");
 	struct file_header sentinel, conf;
 	int next, block = 0;
 	uint32_t seq;
-
-	if (!v)
-		return -1;
 
 	next = snapshot_next_free(v, &seq);
 	block = config_find(v, &conf, &sentinel);
@@ -328,9 +324,9 @@ _ramoverlay(char *rom, char *overlay)
 }
 
 int
-mount_snapshot(void)
+mount_snapshot(struct volume *v)
 {
-	snapshot_sync();
+	snapshot_sync(v);
 	setenv("SNAPSHOT", "magic", 1);
 	_ramoverlay("/rom", "/overlay");
 	system("/sbin/snapshot unpack");

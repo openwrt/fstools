@@ -143,9 +143,8 @@ handle_whiteout(const char *dir)
 }
 
 int
-jffs2_switch(int argc, char **argv)
+jffs2_switch(struct volume *v)
 {
-	struct volume *v;
 	char *mp;
 	int ret = -1;
 
@@ -157,7 +156,6 @@ jffs2_switch(int argc, char **argv)
 		return ret;
 	}
 
-	v = volume_find("rootfs_data");
 	mp = find_mount_point(v->blk, 0);
 	if (mp) {
 		fprintf(stderr, "rootfs_data:%s is already mounted as %s\n", v->blk, mp);
@@ -201,19 +199,12 @@ jffs2_switch(int argc, char **argv)
 	return ret;
 }
 
-static int overlay_mount_fs(void)
+static int overlay_mount_fs(struct volume *v)
 {
-	struct volume *v;
 	char *fstype;
 
 	if (mkdir("/tmp/overlay", 0755)) {
 		fprintf(stderr, "failed to mkdir /tmp/overlay: %s\n", strerror(errno));
-		return -1;
-	}
-
-	v = volume_find("rootfs_data");
-	if (!v) {
-		fprintf(stderr, "rootfs_data does not exist\n");
 		return -1;
 	}
 
@@ -236,9 +227,8 @@ static int overlay_mount_fs(void)
 	return -1;
 }
 
-int mount_overlay(void)
+int mount_overlay(struct volume *v)
 {
-	struct volume *v = volume_find("rootfs_data");;
 	char *mp;
 
 	if (!v)
@@ -250,7 +240,7 @@ int mount_overlay(void)
 		return -1;
 	}
 
-	overlay_mount_fs();
+	overlay_mount_fs(v);
 
 	extroot_prefix = "/tmp/overlay";
 	if (!mount_extroot()) {

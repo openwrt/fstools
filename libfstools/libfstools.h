@@ -17,6 +17,8 @@
 #include <libubox/list.h>
 #include <libubox/blob.h>
 
+struct volume;
+
 enum {
 	FS_NONE,
 	FS_SNAPSHOT,
@@ -27,8 +29,8 @@ enum {
 
 extern char const *extroot_prefix;
 extern int mount_extroot(void);
-extern int mount_snapshot(void);
-extern int mount_overlay(void);
+extern int mount_snapshot(struct volume *v);
+extern int mount_overlay(struct volume *v);
 
 extern int mount_move(char *oldroot, char *newroot, char *dir);
 extern int pivot(char *new, char *old);
@@ -43,7 +45,7 @@ extern int find_mtd_block(char *name, char *part, int plen);
 extern int find_mtd_char(char *name, char *part, int plen);
 
 extern int jffs2_ready(char *mtd);
-extern int jffs2_switch(int argc, char **argv);
+extern int jffs2_switch(struct volume *v);
 
 extern int handle_whiteout(const char *dir);
 extern void foreachdir(const char *dir, int (*cb)(const char*));

@@ -47,11 +47,11 @@ start(int argc, char *argv[1])
 
 	case FS_JFFS2:
 	case FS_UBIFS:
-		mount_overlay();
+		mount_overlay(v);
 		break;
 
 	case FS_SNAPSHOT:
-		mount_snapshot();
+		mount_snapshot(v);
 		break;
 	}
 
@@ -78,7 +78,7 @@ done(int argc, char *argv[1])
 	switch (volume_identify(v)) {
 	case FS_NONE:
 	case FS_DEADCODE:
-		return jffs2_switch(argc, argv);
+		return jffs2_switch(v);
 	}
 
 	return 0;
