@@ -41,10 +41,7 @@ extern int find_overlay_mount(char *overlay);
 extern char* find_mount(char *mp);
 extern char* find_mount_point(char *block, int mtd_only);
 extern int find_filesystem(char *fs);
-extern int find_mtd_block(char *name, char *part, int plen);
-extern int find_mtd_char(char *name, char *part, int plen);
 
-extern int jffs2_ready(char *mtd);
 extern int jffs2_switch(struct volume *v);
 
 extern int handle_whiteout(const char *dir);
