@@ -36,6 +36,10 @@
 
 #include "libblkid-tiny/libblkid-tiny.h"
 
+#ifdef UBIFS_EXTROOT
+#include "libubi/libubi.h"
+#endif
+
 #define ERROR(fmt, ...) do { \
 		syslog(LOG_ERR, fmt, ## __VA_ARGS__); \
 		fprintf(stderr, "block: "fmt, ## __VA_ARGS__); \
@@ -823,13 +827,77 @@ static int find_block_mtd(char *name, char *part, int plen)
 	return 0;
 }
 
+#ifdef UBIFS_EXTROOT
+static int find_ubi_vol(libubi_t libubi, char *name, int *dev_num, int *vol_id)
+{
+	int dev = 0;
+
+	while (ubi_dev_present(libubi, dev))
+	{
+		struct ubi_dev_info dev_info;
+		struct ubi_vol_info vol_info;
+
+		if (ubi_get_dev_info1(libubi, dev++, &dev_info))
+			continue;
+		if (ubi_get_vol_info1_nm(libubi, dev_info.dev_num, name, &vol_info))
+			continue;
+
+		*dev_num = dev_info.dev_num;
+		*vol_id = vol_info.vol_id;
+
+		return 0;
+	}
+
+	return -1;
+}
+
+static int find_block_ubi(libubi_t libubi, char *name, char *part, int plen)
+{
+	int dev_num;
+	int vol_id;
+	int err = -1;
+
+	err = find_ubi_vol(libubi, name, &dev_num, &vol_id);
+	if (!err)
+		snprintf(part, plen, "/dev/ubi%d_%d", dev_num, vol_id);
+
+	return err;
+}
+
+static int find_block_ubi_RO(libubi_t libubi, char *name, char *part, int plen)
+{
+	int dev_num;
+	int vol_id;
+	int err = -1;
+
+	err = find_ubi_vol(libubi, name, &dev_num, &vol_id);
+	if (!err)
+		snprintf(part, plen, "/dev/ubiblock%d_%d", dev_num, vol_id);
+
+	return err;
+}
+#endif
+
 static int check_extroot(char *path)
 {
 	struct blkid_struct_probe *pr = NULL;
 	char fs[32];
 
+#ifdef UBIFS_EXTROOT
+	if (find_block_mtd("rootfs", fs, sizeof(fs))) {
+		int err = -1;
+		libubi_t libubi;
+
+		libubi = libubi_open();
+		err = find_block_ubi_RO(libubi, "rootfs", fs, sizeof(fs));
+		libubi_close(libubi);
+		if (err)
+			return -1;
+	}
+#else
 	if (find_block_mtd("rootfs", fs, sizeof(fs)))
 		return -1;
+#endif
 
 	list_for_each_entry(pr, &devices, list) {
 		if (!strcmp(pr->dev, fs)) {
@@ -933,6 +1001,9 @@ static int main_extroot(int argc, char **argv)
 	char fs[32] = { 0 };
 	char fs_data[32] = { 0 };
 	int err = -1;
+#ifdef UBIFS_EXTROOT
+	libubi_t libubi;
+#endif
 
 	if (!getenv("PREINIT"))
 		return -1;
@@ -947,8 +1018,18 @@ static int main_extroot(int argc, char **argv)
 
 	find_block_mtd("rootfs", fs, sizeof(fs));
 	if (!fs[0]) {
+#ifdef UBIFS_EXTROOT
+		libubi = libubi_open();
+		find_block_ubi_RO(libubi, "rootfs", fs, sizeof(fs));
+		libubi_close(libubi);
+		if (!fs[0]) {
+			ERROR("extroot: unable to locate rootfs mtdblock / ubiblock\n");
+			return -2;
+		}
+#else
 		ERROR("extroot: unable to locate rootfs mtdblock\n");
 		return -2;
+#endif
 	}
 
 	pr = find_block_info(NULL, NULL, fs);
@@ -974,6 +1055,26 @@ static int main_extroot(int argc, char **argv)
 			return err;
 		}
 	}
+
+#ifdef UBIFS_EXTROOT
+	memset(fs_data, 0, sizeof(fs_data));
+	libubi = libubi_open();
+	find_block_ubi(libubi, "rootfs_data", fs_data, sizeof(fs_data));
+	libubi_close(libubi);
+	if (fs_data[0]) {
+		char cfg[] = "/tmp/ubifs_cfg";
+
+		mkdir_p(cfg);
+		if (!mount(fs_data, cfg, "ubifs", MS_NOATIME, NULL)) {
+			err = mount_extroot(cfg);
+			umount2(cfg, MNT_DETACH);
+		}
+		if (err < 0)
+			rmdir("/tmp/overlay");
+		rmdir(cfg);
+		return err;
+       }
+#endif
 
 	return mount_extroot(NULL);
 }

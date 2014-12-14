@@ -48,7 +48,12 @@ TARGET_LINK_LIBRARIES(mount_root fstools)
 INSTALL(TARGETS mount_root RUNTIME DESTINATION sbin)
 
 ADD_EXECUTABLE(block block.c)
-TARGET_LINK_LIBRARIES(block blkid-tiny uci ubox blobmsg_json)
+IF(DEFINED CMAKE_UBIFS_EXTROOT)
+	ADD_DEFINITIONS(-DUBIFS_EXTROOT)
+	TARGET_LINK_LIBRARIES(block blkid-tiny uci ubox blobmsg_json ubi-utils)
+ELSE(DEFINED CMAKE_UBIFS_EXTROOT)
+	TARGET_LINK_LIBRARIES(block blkid-tiny uci ubox blobmsg_json)
+ENDIF(DEFINED CMAKE_UBIFS_EXTROOT)
 INSTALL(TARGETS block RUNTIME DESTINATION sbin)
 
 ADD_EXECUTABLE(jffs2reset jffs2reset.c)
