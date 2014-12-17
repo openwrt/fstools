@@ -598,6 +598,10 @@ static void check_filesystem(struct blkid_struct_probe *pr)
 	struct stat statbuf;
 	char *e2fsck = "/usr/sbin/e2fsck";
 
+	/* UBIFS does not need stuff like fsck */
+	if (!strncmp(pr->id->name, "ubifs", 5))
+		return;
+
 	if (strncmp(pr->id->name, "ext", 3)) {
 		ERROR("check_filesystem: %s is not supported\n", pr->id->name);
 		return;
@@ -974,7 +978,8 @@ static int mount_extroot(char *cfg)
 		pr = find_block_info(m->uuid, m->label, m->device);
 	}
 	if (pr) {
-		if (strncmp(pr->id->name, "ext", 3)) {
+		if (strncmp(pr->id->name, "ext", 3) &&
+		    strncmp(pr->id->name, "ubifs", 5)) {
 			ERROR("extroot: %s is not supported, try ext4\n", pr->id->name);
 			return -1;
 		}
