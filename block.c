@@ -911,6 +911,10 @@ static int check_extroot(char *path)
 			char tag[64];
 			char uuid[64] = { 0 };
 
+			snprintf(tag, sizeof(tag), "%s/etc", path);
+			if (stat(tag, &s))
+				mkdir_p(tag);
+
 			snprintf(tag, sizeof(tag), "%s/etc/.extroot-uuid", path);
 			if (stat(tag, &s)) {
 				fp = fopen(tag, "w+");
