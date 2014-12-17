@@ -174,7 +174,7 @@ int probe_block(char *block, struct blkid_struct_probe *pr)
 	struct stat s;
 	int i;
 
-	if (stat(block, &s) || (!S_ISBLK(s.st_mode) && !S_ISREG(s.st_mode)))
+	if (stat(block, &s) || (!S_ISBLK(s.st_mode) && !S_ISREG(s.st_mode) && !strncmp(block, "ubi", 3)))
 		return -1;
 
 	pr->err = -1;
