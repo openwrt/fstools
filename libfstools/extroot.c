@@ -24,6 +24,10 @@
 
 char const *extroot_prefix = NULL;
 
+/*
+ * This will execute "block extroot" and make use of mounted extroot or return
+ * an error.
+ */
 int mount_extroot(void)
 {
 	char ldlib_path[32];

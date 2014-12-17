@@ -935,6 +935,9 @@ static int check_extroot(char *path)
 	return -1;
 }
 
+/*
+ * Read info about extroot from UCI (using prefix) and mount it.
+ */
 static int mount_extroot(char *cfg)
 {
 	char overlay[] = "/tmp/extroot/overlay";
@@ -944,9 +947,11 @@ static int mount_extroot(char *cfg)
 	struct mount *m;
 	int err = -1;
 
+	/* Load @cfg/etc/config/fstab */
 	if (config_load(cfg))
 		return -2;
 
+	/* See if there is extroot-specific mount config */
 	m = find_block(NULL, NULL, NULL, "/");
 	if (!m)
 		m = find_block(NULL, NULL, NULL, "/overlay");
@@ -957,6 +962,7 @@ static int mount_extroot(char *cfg)
 		return -1;
 	}
 
+	/* Find block device pointed by the mount config */
 	pr = find_block_info(m->uuid, m->label, m->device);
 
 	if (!pr && delay_root){
@@ -999,7 +1005,7 @@ static int main_extroot(int argc, char **argv)
 {
 	struct blkid_struct_probe *pr;
 	char fs[32] = { 0 };
-	char fs_data[32] = { 0 };
+	char blkdev_path[32] = { 0 };
 	int err = -1;
 #ifdef UBIFS_EXTROOT
 	libubi_t libubi;
@@ -1016,6 +1022,10 @@ static int main_extroot(int argc, char **argv)
 	mkblkdev();
 	cache_load(1);
 
+	/*
+	 * Make sure there is "rootfs" MTD partition or UBI volume.
+	 * TODO: What for?
+	 */
 	find_block_mtd("rootfs", fs, sizeof(fs));
 	if (!fs[0]) {
 #ifdef UBIFS_EXTROOT
@@ -1038,14 +1048,24 @@ static int main_extroot(int argc, char **argv)
 		return -3;
 	}
 
-	find_block_mtd("rootfs_data", fs_data, sizeof(fs_data));
-	if (fs_data[0]) {
-		pr = find_block_info(NULL, NULL, fs_data);
+	/*
+	 * Look for "rootfs_data". We will want to mount it and check for
+	 * extroot configuration.
+	 */
+
+	/* Start with looking for MTD partition */
+	find_block_mtd("rootfs_data", blkdev_path, sizeof(blkdev_path));
+	if (blkdev_path[0]) {
+		pr = find_block_info(NULL, NULL, blkdev_path);
 		if (pr && !strcmp(pr->id->name, "jffs2")) {
 			char cfg[] = "/tmp/jffs_cfg";
 
+			/*
+			 * Mount MTD part and try extroot (using
+			 * /etc/config/fstab from that partition)
+			 */
 			mkdir_p(cfg);
-			if (!mount(fs_data, cfg, "jffs2", MS_NOATIME, NULL)) {
+			if (!mount(blkdev_path, cfg, "jffs2", MS_NOATIME, NULL)) {
 				err = mount_extroot(cfg);
 				umount2(cfg, MNT_DETACH);
 			}
@@ -1057,15 +1077,17 @@ static int main_extroot(int argc, char **argv)
 	}
 
 #ifdef UBIFS_EXTROOT
-	memset(fs_data, 0, sizeof(fs_data));
+	/* ... but it also could be an UBI volume */
+	memset(blkdev_path, 0, sizeof(blkdev_path));
 	libubi = libubi_open();
-	find_block_ubi(libubi, "rootfs_data", fs_data, sizeof(fs_data));
+	find_block_ubi(libubi, "rootfs_data", blkdev_path, sizeof(blkdev_path));
 	libubi_close(libubi);
-	if (fs_data[0]) {
+	if (blkdev_path[0]) {
 		char cfg[] = "/tmp/ubifs_cfg";
 
+		/* Mount volume and try extroot (using fstab from that vol) */
 		mkdir_p(cfg);
-		if (!mount(fs_data, cfg, "ubifs", MS_NOATIME, NULL)) {
+		if (!mount(blkdev_path, cfg, "ubifs", MS_NOATIME, NULL)) {
 			err = mount_extroot(cfg);
 			umount2(cfg, MNT_DETACH);
 		}

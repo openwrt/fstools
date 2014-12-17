@@ -18,6 +18,10 @@
 #include "libfstools/libfstools.h"
 #include "libfstools/volume.h"
 
+/*
+ * Called in the early (PREINIT) stage, when we immediately need some writable
+ * filesystem.
+ */
 static int
 start(int argc, char *argv[1])
 {
@@ -34,15 +38,26 @@ start(int argc, char *argv[1])
 		return 0;
 	}
 
+	/*
+	 * Before trying to mount and use "rootfs_data" let's check if there is
+	 * extroot configured. Following call will handle reading config from
+	 * the "rootfs_data" on its own.
+	 */
 	extroot_prefix = "";
 	if (!mount_extroot()) {
 		fprintf(stderr, "fs-state: switched to extroot\n");
 		return 0;
 	}
 
+	/* There isn't extroot, so just try to mount "rootfs_data" */
 	switch (volume_identify(v)) {
 	case FS_NONE:
 	case FS_DEADCODE:
+		/*
+		 * Filesystem isn't ready yet and we are in the preinit, so we
+		 * can't afford waiting for it. Use tmpfs for now and handle it
+		 * properly in the "done" call.
+		 */
 		return ramoverlay();
 
 	case FS_JFFS2:
@@ -67,6 +82,9 @@ stop(int argc, char *argv[1])
 	return 0;
 }
 
+/*
+ * Called at the end of init, it can wait for filesystem if needed.
+ */
 static int
 done(int argc, char *argv[1])
 {
