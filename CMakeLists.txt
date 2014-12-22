@@ -26,7 +26,9 @@ ADD_LIBRARY(blkid-tiny SHARED
 		libblkid-tiny/hfs.c
 		libblkid-tiny/swap.c
 		libblkid-tiny/ubifs.c
-		libblkid-tiny/squashfs.c)
+		libblkid-tiny/squashfs.c
+		libblkid-tiny/btrfs.c
+		)
 INSTALL(TARGETS blkid-tiny LIBRARY DESTINATION lib)
 
 ADD_LIBRARY(ubi-utils STATIC
