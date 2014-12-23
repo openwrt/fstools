@@ -165,22 +165,34 @@ static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volid
 
 static int ubi_part_match(struct volume *v, char *name, unsigned int ubi_num)
 {
-	unsigned int i, volumes_count;
+	DIR *ubi_dir;
+	struct dirent *ubi_dirent;
+	unsigned int volid;
 	char devdir[BUFLEN];
+	int ret = -1;
 
 	snprintf(devdir, sizeof(devdir), "%s/ubi%u",
 		ubi_dir_name, ubi_num);
 
-	if (read_uint_from_file(devdir, "volumes_count", &volumes_count))
-		return -1;
+	ubi_dir = opendir(devdir);
+	if (!ubi_dir)
+		return ret;
 
-	for (i=0;i<volumes_count;i++) {
-		if (!ubi_volume_match(v, name, ubi_num, i)) {
-			return 0;
+	while ((ubi_dirent = readdir(ubi_dir)) != NULL) {
+		if (strncmp(ubi_dirent->d_name, "ubi", 3))
+			continue;
+
+		if (sscanf(ubi_dirent->d_name, "ubi%*u_%u", &volid) != 1)
+			continue;
+
+		if (!ubi_volume_match(v, name, ubi_num, volid)) {
+			ret = 0;
+			break;
 		}
 	}
+	closedir(ubi_dir);
 
-	return -1;
+	return ret;
 }
 
 static int ubi_volume_find(struct volume *v, char *name)
