@@ -36,6 +36,9 @@ find_overlay_mount(char *overlay)
 	return ret;
 }
 
+/*
+ * Find path of a device mounted to the given point.
+ */
 char*
 find_mount(char *mp)
 {
@@ -53,6 +56,7 @@ find_mount(char *mp)
 			fclose(fp);
 			return NULL;
 		}
+		*t = '\0';
 		t++;
 		s = strstr(t, " ");
 		if (!s) {
@@ -63,7 +67,7 @@ find_mount(char *mp)
 
 		if (!strcmp(t, mp)) {
 			fclose(fp);
-			return t;
+			return line;
 		}
 	}
 
