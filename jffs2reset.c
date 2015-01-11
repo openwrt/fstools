@@ -28,25 +28,25 @@
 static int
 handle_rmdir(const char *dir)
 {
-	struct stat s;
-	struct dirent **namelist;
-	int n;
+	struct dirent *dt;
+	struct stat st;
+	DIR *d;
+	int fd;
 
-	n = scandir(dir, &namelist, NULL, NULL);
-
-	if (n < 1)
+	d = opendir(dir);
+	if (!d)
 		return -1;
 
-	while (n--) {
-		char file[256];
+	fd = dirfd(d);
 
-		snprintf(file, sizeof(file), "%s%s", dir, namelist[n]->d_name);
-		if (!lstat(file, &s) && !S_ISDIR(s.st_mode))
-			unlink(file);
-		free(namelist[n]);
+	while ((dt = readdir(d)) != NULL) {
+		if (fstatat(fd, dt->d_name, &st, AT_SYMLINK_NOFOLLOW) || S_ISDIR(st.st_mode))
+			continue;
+
+		unlinkat(fd, dt->d_name, 0);
 	}
-	free(namelist);
 
+	closedir(d);
 	rmdir(dir);
 
 	return 0;
