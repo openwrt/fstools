@@ -1016,7 +1016,6 @@ static int mount_extroot(char *cfg)
 static int main_extroot(int argc, char **argv)
 {
 	struct blkid_struct_probe *pr;
-	char fs[32] = { 0 };
 	char blkdev_path[32] = { 0 };
 	int err = -1;
 #ifdef UBIFS_EXTROOT
@@ -1033,32 +1032,6 @@ static int main_extroot(int argc, char **argv)
 
 	mkblkdev();
 	cache_load(1);
-
-	/*
-	 * Make sure there is "rootfs" MTD partition or UBI volume.
-	 * TODO: What for?
-	 */
-	find_block_mtd("rootfs", fs, sizeof(fs));
-	if (!fs[0]) {
-#ifdef UBIFS_EXTROOT
-		libubi = libubi_open();
-		find_block_ubi_RO(libubi, "rootfs", fs, sizeof(fs));
-		libubi_close(libubi);
-		if (!fs[0]) {
-			ERROR("extroot: unable to locate rootfs mtdblock / ubiblock\n");
-			return -2;
-		}
-#else
-		ERROR("extroot: unable to locate rootfs mtdblock\n");
-		return -2;
-#endif
-	}
-
-	pr = find_block_info(NULL, NULL, fs);
-	if (!pr) {
-		ERROR("extroot: unable to retrieve rootfs information\n");
-		return -3;
-	}
 
 	/*
 	 * Look for "rootfs_data". We will want to mount it and check for
