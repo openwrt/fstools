@@ -410,14 +410,16 @@ static int config_load(char *cfg)
 		uci_set_confdir(ctx, path);
 	}
 
-	if (uci_load(ctx, "fstab", &pkg))
-	{
-		char *err;
-		uci_get_errorstr(ctx, &err, "fstab");
-		ERROR("extroot: failed to load %s/etc/config/%s\n",
-		      cfg ? cfg : "", err);
-		free(err);
-		return -1;
+	if (uci_load(ctx, "fstab", &pkg)) {
+		uci_set_confdir(ctx, "/etc/config");
+		if (uci_load(ctx, "fstab", &pkg)) {
+			char *err;
+			uci_get_errorstr(ctx, &err, "fstab");
+			ERROR("extroot: failed to load %s/etc/config/%s\n",
+			      cfg ? cfg : "", err);
+			free(err);
+			return -1;
+		}
 	}
 
 	vlist_update(&mounts);
