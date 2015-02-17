@@ -25,17 +25,17 @@
 static int
 start(int argc, char *argv[1])
 {
-	struct volume *v = volume_find("rootfs_data");
+	struct volume *root;
+	struct volume *data = volume_find("rootfs_data");
 
 	if (!getenv("PREINIT"))
 		return -1;
 
-	if (!v) {
-		v = volume_find("rootfs");
-		volume_init(v);
+	if (!data) {
+		root = volume_find("rootfs");
+		volume_init(root);
 		fprintf(stderr, "mounting /dev/root\n");
 		mount("/dev/root", "/", NULL, MS_NOATIME | MS_REMOUNT, 0);
-		return 0;
 	}
 
 	/*
@@ -50,7 +50,7 @@ start(int argc, char *argv[1])
 	}
 
 	/* There isn't extroot, so just try to mount "rootfs_data" */
-	switch (volume_identify(v)) {
+	switch (volume_identify(data)) {
 	case FS_NONE:
 	case FS_DEADCODE:
 		/*
@@ -62,11 +62,11 @@ start(int argc, char *argv[1])
 
 	case FS_JFFS2:
 	case FS_UBIFS:
-		mount_overlay(v);
+		mount_overlay(data);
 		break;
 
 	case FS_SNAPSHOT:
-		mount_snapshot(v);
+		mount_snapshot(data);
 		break;
 	}
 
