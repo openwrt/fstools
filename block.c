@@ -19,6 +19,7 @@
 #include <syslog.h>
 #include <libgen.h>
 #include <glob.h>
+#include <dirent.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -885,6 +886,35 @@ static int find_block_ubi_RO(libubi_t libubi, char *name, char *part, int plen)
 }
 #endif
 
+static int find_root_dev(char *buf, int len)
+{
+	DIR *d;
+	dev_t root;
+	struct stat s;
+	struct dirent *e;
+
+	if (stat("/", &s))
+		return -1;
+
+	if (!(d = opendir("/dev")))
+		return -1;
+
+	root = s.st_dev;
+
+	while ((e = readdir(d)) != NULL) {
+		snprintf(buf, len, "/dev/%s", e->d_name);
+
+		if (stat(buf, &s) || s.st_rdev != root)
+			continue;
+
+		closedir(d);
+		return 0;
+	}
+
+	closedir(d);
+	return -1;
+}
+
 static int check_extroot(char *path)
 {
 	struct blkid_struct_probe *pr = NULL;
@@ -902,8 +932,10 @@ static int check_extroot(char *path)
 			return -1;
 	}
 #else
-	if (find_block_mtd("rootfs", fs, sizeof(fs)))
-		return -1;
+	if (find_block_mtd("rootfs", fs, sizeof(fs))) {
+		if (find_root_dev(fs, sizeof(fs)))
+			return -1;
+	}
 #endif
 
 	list_for_each_entry(pr, &devices, list) {
