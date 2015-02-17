@@ -42,8 +42,11 @@ int mount_extroot(void)
 	sprintf(ldlib_path, "%s/lib", extroot_prefix);
 	sprintf(block_path, "%s/sbin/block", extroot_prefix);
 
-	if (stat(block_path, &s))
-		return -1;
+	if (stat(block_path, &s)) {
+		sprintf(block_path, "/sbin/block");
+		if (stat(block_path, &s))
+			return -1;
+	}
 
 	sprintf(kmod_loader, "/sbin/kmodloader %s/etc/modules-boot.d/ %s", extroot_prefix, extroot_prefix);
 	system(kmod_loader);
