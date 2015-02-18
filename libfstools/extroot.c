@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <libgen.h>
 
 #include "libfstools.h"
 
@@ -32,29 +33,43 @@ int mount_extroot(void)
 {
 	char ldlib_path[32];
 	char block_path[32];
-	char kmod_loader[64];
+	char kmod_loader[128];
+	char *kmod_prefix;
 	struct stat s;
 	pid_t pid;
 
 	if (!extroot_prefix)
 		return -1;
 
-	sprintf(ldlib_path, "%s/lib", extroot_prefix);
-	sprintf(block_path, "%s/sbin/block", extroot_prefix);
+	/* try finding the library directory */
+	snprintf(ldlib_path, sizeof(ldlib_path), "%s/upper/lib", extroot_prefix);
 
-	if (stat(block_path, &s)) {
-		sprintf(block_path, "/sbin/block");
-		if (stat(block_path, &s))
-			return -1;
+	if (stat(ldlib_path, &s) || !S_ISDIR(s.st_mode))
+		snprintf(ldlib_path, sizeof(ldlib_path), "%s/lib", extroot_prefix);
+
+	/* try finding the block executable */
+	snprintf(block_path, sizeof(block_path), "%s/upper/sbin/block", extroot_prefix);
+
+	if (stat(block_path, &s) || !S_ISREG(s.st_mode))
+		snprintf(block_path, sizeof(block_path), "%s/sbin/block", extroot_prefix);
+
+	if (stat(block_path, &s) || !S_ISREG(s.st_mode))
+		snprintf(block_path, sizeof(block_path), "/sbin/block");
+
+	if (stat(block_path, &s) || !S_ISREG(s.st_mode))
+		return -1;
+
+	/* set LD_LIBRARY_PATH env var and load kmods from overlay if we found a lib directory there */
+	if (!stat(ldlib_path, &s) && S_ISDIR(s.st_mode)) {
+		setenv("LD_LIBRARY_PATH", ldlib_path, 1);
+		kmod_prefix = dirname(ldlib_path);
+		sprintf(kmod_loader, "/sbin/kmodloader %s/etc/modules-boot.d/ %s", kmod_prefix, kmod_prefix);
+		system(kmod_loader);
 	}
-
-	sprintf(kmod_loader, "/sbin/kmodloader %s/etc/modules-boot.d/ %s", extroot_prefix, extroot_prefix);
-	system(kmod_loader);
 
 	pid = fork();
 	if (!pid) {
 		mkdir("/tmp/extroot", 0755);
-		setenv("LD_LIBRARY_PATH", ldlib_path, 1);
 		execl(block_path, block_path, "extroot", NULL);
 		exit(-1);
 	} else if (pid > 0) {
