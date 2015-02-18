@@ -20,6 +20,7 @@
 #include <libgen.h>
 #include <glob.h>
 #include <dirent.h>
+#include <stdarg.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -41,9 +42,35 @@
 #include "libubi/libubi.h"
 #endif
 
+static int kmsg = 0;
+
+static void klog(int prio, const char *fmt, ...)
+{
+	va_list ap;
+	FILE *f = fopen("/dev/kmsg", "w");
+
+	if (f) {
+		fprintf(f, "<%d>", prio);
+
+		va_start(ap, fmt);
+		vfprintf(f, fmt, ap);
+		va_end(ap);
+
+		fclose(f);
+	}
+}
+
+#define KINFO(fmt, ...) do { \
+		if (kmsg) klog(LOG_INFO, "block: " fmt, ## __VA_ARGS__); \
+	} while (0)
+
 #define ERROR(fmt, ...) do { \
-		syslog(LOG_ERR, fmt, ## __VA_ARGS__); \
-		fprintf(stderr, "block: "fmt, ## __VA_ARGS__); \
+		if (kmsg) \
+			klog(LOG_ERR, "block: " fmt, ## __VA_ARGS__); \
+		else { \
+			syslog(LOG_ERR, fmt, ## __VA_ARGS__); \
+			fprintf(stderr, "block: "fmt, ## __VA_ARGS__); \
+		} \
 	} while (0)
 
 enum {
@@ -1061,6 +1088,8 @@ static int main_extroot(int argc, char **argv)
 		fprintf(stderr, "Usage: block extroot mountpoint\n");
 		return -1;
 	}
+
+	kmsg = 1;
 
 	mkblkdev();
 	cache_load(1);
