@@ -21,6 +21,7 @@
 #include <glob.h>
 #include <dirent.h>
 #include <stdarg.h>
+#include <string.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -469,7 +470,7 @@ static int config_load(char *cfg)
 	}
 
 	if (!pkg) {
-		ERROR("extroot: no usable configuration\n");
+		ERROR("no usable configuration\n");
 		return -1;
 	}
 
@@ -758,7 +759,7 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 		            (m->options) ? (m->options) : (""));
 		if (err)
 			ERROR("mounting %s (%s) as %s failed (%d) - %s\n",
-					pr->dev, pr->id->name, target, err, strerror(err));
+			      pr->dev, pr->id->name, target, err, strerror(err));
 		else
 			handle_swapfiles(true);
 		return err;
@@ -965,31 +966,57 @@ static int find_root_dev(char *buf, int len)
 	return -1;
 }
 
+static int test_fs_support(const char *name)
+{
+	char line[128], *p;
+	int rv = -1;
+	FILE *f;
+
+	if ((f = fopen("/proc/filesystems", "r")) != NULL) {
+		while (fgets(line, sizeof(line), f)) {
+			p = strtok(line, "\t\n");
+
+			if (p && !strcmp(p, "nodev"))
+				p = strtok(NULL, "\t\n");
+
+			if (p && !strcmp(p, name)) {
+				rv = 0;
+				break;
+			}
+		}
+		fclose(f);
+	}
+
+	return rv;
+}
+
 static int check_extroot(char *path)
 {
 	struct blkid_struct_probe *pr = NULL;
-	char fs[32];
+	char devpath[32];
 
 #ifdef UBIFS_EXTROOT
-	if (find_block_mtd("rootfs", fs, sizeof(fs))) {
+	if (find_block_mtd("rootfs", devpath, sizeof(devpath))) {
 		int err = -1;
 		libubi_t libubi;
 
 		libubi = libubi_open();
-		err = find_block_ubi_RO(libubi, "rootfs", fs, sizeof(fs));
+		err = find_block_ubi_RO(libubi, "rootfs", devpath, sizeof(devpath));
 		libubi_close(libubi);
 		if (err)
 			return -1;
 	}
 #else
-	if (find_block_mtd("rootfs", fs, sizeof(fs))) {
-		if (find_root_dev(fs, sizeof(fs)))
+	if (find_block_mtd("rootfs", devpath, sizeof(devpath))) {
+		if (find_root_dev(devpath, sizeof(devpath))) {
+			ERROR("extroot: unable to determine root device\n");
 			return -1;
+		}
 	}
 #endif
 
 	list_for_each_entry(pr, &devices, list) {
-		if (!strcmp(pr->dev, fs)) {
+		if (!strcmp(pr->dev, devpath)) {
 			struct stat s;
 			FILE *fp = NULL;
 			char tag[64];
@@ -1003,7 +1030,8 @@ static int check_extroot(char *path)
 			if (stat(tag, &s)) {
 				fp = fopen(tag, "w+");
 				if (!fp) {
-					ERROR("extroot: failed to write uuid tag file\n");
+					ERROR("extroot: failed to write UUID to %s: %d (%s)\n",
+					      tag, errno, strerror(errno));
 					/* return 0 to continue boot regardless of error */
 					return 0;
 				}
@@ -1014,17 +1042,24 @@ static int check_extroot(char *path)
 
 			fp = fopen(tag, "r");
 			if (!fp) {
-				ERROR("extroot: failed to open uuid tag file\n");
+				ERROR("extroot: failed to read UUID from %s: %d (%s)\n",
+				      tag, errno, strerror(errno));
 				return -1;
 			}
 
 			fgets(uuid, sizeof(uuid), fp);
 			fclose(fp);
+
 			if (!strcasecmp(uuid, pr->uuid))
 				return 0;
-			ERROR("extroot: uuid tag does not match rom uuid\n");
+
+			ERROR("extroot: UUID mismatch (root: %s, %s: %s)\n",
+			      pr->uuid, basename(path), uuid);
+			return -1;
 		}
 	}
+
+	ERROR("extroot: unable to lookup root device %s\n", devpath);
 	return -1;
 }
 
@@ -1051,7 +1086,7 @@ static int mount_extroot(char *cfg)
 
 	if (!m || !m->extroot)
 	{
-		ERROR("extroot: no root or overlay mount defined\n");
+		KINFO("extroot: not configured\n");
 		return -1;
 	}
 
@@ -1059,7 +1094,7 @@ static int mount_extroot(char *cfg)
 	pr = find_block_info(m->uuid, m->label, m->device);
 
 	if (!pr && delay_root){
-		ERROR("extroot: is not ready yet, retrying in %u seconds\n", delay_root);
+		KINFO("extroot: device not present, retrying in %u seconds\n", delay_root);
 		sleep(delay_root);
 		mkblkdev();
 		cache_load(0);
@@ -1068,9 +1103,15 @@ static int mount_extroot(char *cfg)
 	if (pr) {
 		if (strncmp(pr->id->name, "ext", 3) &&
 		    strncmp(pr->id->name, "ubifs", 5)) {
-			ERROR("extroot: %s is not supported, try ext4\n", pr->id->name);
+			ERROR("extroot: unsupported filesystem %s, try ext4\n", pr->id->name);
 			return -1;
 		}
+
+		if (test_fs_support(pr->id->name)) {
+			ERROR("extroot: filesystem %s not supported by kernel\n", pr->id->name);
+			return -1;
+		}
+
 		if (m->overlay)
 			path = overlay;
 		mkdir_p(path);
@@ -1081,15 +1122,17 @@ static int mount_extroot(char *cfg)
 		err = mount(pr->dev, path, pr->id->name, 0, (m->options) ? (m->options) : (""));
 
 		if (err) {
-			ERROR("mounting %s (%s) as %s failed (%d) - %s\n",
-					pr->dev, pr->id->name, path, err, strerror(err));
+			ERROR("extroot: mounting %s (%s) on %s failed: %d (%s)\n",
+			      pr->dev, pr->id->name, path, err, strerror(err));
 		} else if (m->overlay) {
 			err = check_extroot(path);
 			if (err)
 				umount(path);
 		}
 	} else {
-		ERROR("extroot: cannot find block device\n");
+		ERROR("extroot: cannot find device %s%s\n",
+		      (m->uuid ? "with UUID " : (m->label ? "with label " : "")),
+		      (m->uuid ? m->uuid : (m->label ? m->label : m->device)));
 	}
 
 	return err;
@@ -1108,7 +1151,7 @@ static int main_extroot(int argc, char **argv)
 		return -1;
 
 	if (argc != 2) {
-		fprintf(stderr, "Usage: block extroot mountpoint\n");
+		fprintf(stderr, "Usage: block extroot\n");
 		return -1;
 	}
 
