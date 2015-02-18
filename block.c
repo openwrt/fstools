@@ -423,31 +423,54 @@ static void mounts_update(struct vlist_tree *tree, struct vlist_node *node_new,
 {
 }
 
+static struct uci_package * config_try_load(struct uci_context *ctx, char *path)
+{
+	char *file = basename(path);
+	char *dir = dirname(path);
+	char *err;
+	struct uci_package *pkg;
+
+	uci_set_confdir(ctx, dir);
+	KINFO("attempting to load %s/%s\n", dir, file);
+
+	if (uci_load(ctx, file, &pkg)) {
+		uci_get_errorstr(ctx, &err, file);
+		ERROR("unable to load configuration (%s)\n", err);
+
+		free(err);
+		return NULL;
+	}
+
+	return pkg;
+}
+
 static int config_load(char *cfg)
 {
-	struct uci_context *ctx;
-	struct uci_package *pkg;
+	struct uci_context *ctx = uci_alloc_context();
+	struct uci_package *pkg = NULL;
 	struct uci_element *e;
+	char path[64];
 
 	vlist_init(&mounts, avl_strcmp, mounts_update);
 
-	ctx = uci_alloc_context();
 	if (cfg) {
-		char path[32];
-		snprintf(path, 32, "%s/etc/config", cfg);
-		uci_set_confdir(ctx, path);
+		snprintf(path, sizeof(path), "%s/upper/etc/config/fstab", cfg);
+		pkg = config_try_load(ctx, path);
+
+		if (!pkg) {
+			snprintf(path, sizeof(path), "%s/etc/config/fstab", cfg);
+			pkg = config_try_load(ctx, path);
+		}
 	}
 
-	if (uci_load(ctx, "fstab", &pkg)) {
-		uci_set_confdir(ctx, "/etc/config");
-		if (uci_load(ctx, "fstab", &pkg)) {
-			char *err;
-			uci_get_errorstr(ctx, &err, "fstab");
-			ERROR("extroot: failed to load %s/etc/config/%s\n",
-			      cfg ? cfg : "", err);
-			free(err);
-			return -1;
-		}
+	if (!pkg) {
+		snprintf(path, sizeof(path), "/etc/config/fstab");
+		pkg = config_try_load(ctx, path);
+	}
+
+	if (!pkg) {
+		ERROR("extroot: no usable configuration\n");
+		return -1;
 	}
 
 	vlist_update(&mounts);
