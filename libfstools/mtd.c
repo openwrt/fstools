@@ -204,22 +204,17 @@ static int mtd_volume_identify(struct volume *v)
 
 	deadc0de = __be32_to_cpu(deadc0de);
 	if (deadc0de == 0xdeadc0de) {
-		ULOG_INFO("jffs2 is not ready - marker found\n");
 		return FS_DEADCODE;
 	}
 
 	jffs2 = __be16_to_cpu(deadc0de >> 16);
 	if (jffs2 == 0x1985) {
-		ULOG_INFO("jffs2 is ready\n");
 		return FS_JFFS2;
 	}
 
 	if (v->type == UBIVOLUME && deadc0de == 0xffffffff) {
-		ULOG_INFO("jffs2 is ready\n");
 		return FS_JFFS2;
 	}
-
-	ULOG_INFO("No jffs2 marker was found\n");
 
 	return FS_NONE;
 }
