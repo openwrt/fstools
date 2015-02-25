@@ -248,7 +248,7 @@ int mount_overlay(struct volume *v)
 		return 0;
 	}
 
-	ULOG_INFO("switching to overlay\n");
+	ULOG_INFO("switching to jffs2 overlay\n");
 	if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
 		ULOG_ERR("switching to jffs2 failed - fallback to ramoverlay\n");
 		return ramoverlay();
