@@ -33,8 +33,7 @@ int mount_extroot(void)
 {
 	char ldlib_path[32];
 	char block_path[32];
-	char kmod_loader[128];
-	char *kmod_prefix;
+	char kmod_loader[64];
 	struct stat s;
 	pid_t pid;
 
@@ -62,8 +61,8 @@ int mount_extroot(void)
 	/* set LD_LIBRARY_PATH env var and load kmods from overlay if we found a lib directory there */
 	if (!stat(ldlib_path, &s) && S_ISDIR(s.st_mode)) {
 		setenv("LD_LIBRARY_PATH", ldlib_path, 1);
-		kmod_prefix = dirname(ldlib_path);
-		sprintf(kmod_loader, "/sbin/kmodloader %s/etc/modules-boot.d/ %s", kmod_prefix, kmod_prefix);
+		snprintf(kmod_loader, sizeof(kmod_loader),
+		         "/sbin/kmodloader %s/etc/modules-boot.d/", dirname(ldlib_path));
 		system(kmod_loader);
 	}
 
