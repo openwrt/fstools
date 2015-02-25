@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <libubox/ulog.h>
+
 #include "libfstools/libfstools.h"
 #include "libfstools/volume.h"
 
@@ -34,7 +36,7 @@ start(int argc, char *argv[1])
 	if (!data) {
 		root = volume_find("rootfs");
 		volume_init(root);
-		fprintf(stderr, "mounting /dev/root\n");
+		ULOG_NOTE("mounting /dev/root\n");
 		mount("/dev/root", "/", NULL, MS_NOATIME | MS_REMOUNT, 0);
 	}
 
@@ -45,7 +47,7 @@ start(int argc, char *argv[1])
 	 */
 	extroot_prefix = "";
 	if (!mount_extroot()) {
-		fprintf(stderr, "fs-state: switched to extroot\n");
+		ULOG_NOTE("switched to extroot\n");
 		return 0;
 	}
 
