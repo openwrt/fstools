@@ -86,13 +86,13 @@ static int mtd_volume_load(struct volume *v)
 	p->fd = mtd_open(p->chr, 0);
 	if (p->fd < 0) {
 		p->fd = 0;
-		fprintf(stderr, "Could not open mtd device: %s\n", p->chr);
+		ULOG_ERR("Could not open mtd device: %s\n", p->chr);
 		return -1;
 	}
 
 	if (ioctl(p->fd, MEMGETINFO, &mtdInfo)) {
 		mtd_volume_close(v);
-		fprintf(stderr, "Could not get MTD device info from %s\n", p->chr);
+		ULOG_ERR("Could not get MTD device info from %s\n", p->chr);
 		return -1;
 	}
 
@@ -173,7 +173,7 @@ static int mtd_volume_find(struct volume *v, char *name)
 	p->chr = strdup(buffer);
 
 	if (mtd_volume_load(v)) {
-		fprintf(stderr, "reading %s failed\n", v->name);
+		ULOG_ERR("reading %s failed\n", v->name);
 		return -1;
 	}
 
@@ -188,14 +188,14 @@ static int mtd_volume_identify(struct volume *v)
 	size_t sz;
 
 	if (mtd_volume_load(v)) {
-		fprintf(stderr, "reading %s failed\n", v->name);
+		ULOG_ERR("reading %s failed\n", v->name);
 		return -1;
 	}
 
 	sz = read(p->fd, &deadc0de, sizeof(deadc0de));
 
 	if (sz != sizeof(deadc0de)) {
-		fprintf(stderr, "reading %s failed: %s\n", v->name, strerror(errno));
+		ULOG_ERR("reading %s failed: %s\n", v->name, strerror(errno));
 		return -1;
 	}
 
@@ -204,22 +204,22 @@ static int mtd_volume_identify(struct volume *v)
 
 	deadc0de = __be32_to_cpu(deadc0de);
 	if (deadc0de == 0xdeadc0de) {
-		fprintf(stderr, "jffs2 is not ready - marker found\n");
+		ULOG_INFO("jffs2 is not ready - marker found\n");
 		return FS_DEADCODE;
 	}
 
 	jffs2 = __be16_to_cpu(deadc0de >> 16);
 	if (jffs2 == 0x1985) {
-		fprintf(stderr, "jffs2 is ready\n");
+		ULOG_INFO("jffs2 is ready\n");
 		return FS_JFFS2;
 	}
 
 	if (v->type == UBIVOLUME && deadc0de == 0xffffffff) {
-		fprintf(stderr, "jffs2 is ready\n");
+		ULOG_INFO("jffs2 is ready\n");
 		return FS_JFFS2;
 	}
 
-	fprintf(stderr, "No jffs2 marker was found\n");
+	ULOG_INFO("No jffs2 marker was found\n");
 
 	return FS_NONE;
 }
@@ -234,7 +234,7 @@ static int mtd_volume_erase(struct volume *v, int offset, int len)
 		return -1;
 
 	if (offset % v->block_size || len % v->block_size) {
-		fprintf(stderr, "mtd erase needs to be block aligned\n");
+		ULOG_ERR("mtd erase needs to be block aligned\n");
 		return -1;
 	}
 
@@ -245,10 +245,10 @@ static int mtd_volume_erase(struct volume *v, int offset, int len)
 	for (eiu.start = first_block * v->block_size;
 			eiu.start < v->size && eiu.start < (first_block + num_blocks) * v->block_size;
 			eiu.start += v->block_size) {
-		fprintf(stderr, "erasing %x %x\n", eiu.start, v->block_size);
+		ULOG_INFO("erasing %x %x\n", eiu.start, v->block_size);
 		ioctl(p->fd, MEMUNLOCK, &eiu);
 		if (ioctl(p->fd, MEMERASE, &eiu))
-			fprintf(stderr, "Failed to erase block at 0x%x\n", eiu.start);
+			ULOG_ERR("Failed to erase block at 0x%x\n", eiu.start);
 	}
 
 	mtd_volume_close(v);
@@ -275,7 +275,7 @@ static int mtd_volume_init(struct volume *v)
 
 	ret = ioctl(p->fd, MEMGETINFO, &mtdinfo);
 	if (ret) {
-		fprintf(stderr, "ioctl(%d, MEMGETINFO) failed: %s\n", p->fd, strerror(errno));
+		ULOG_ERR("ioctl(%d, MEMGETINFO) failed: %s\n", p->fd, strerror(errno));
 	} else {
 		struct erase_info_user mtdlock;
 
@@ -295,12 +295,12 @@ static int mtd_volume_read(struct volume *v, void *buf, int offset, int length)
 		return -1;
 
 	if (lseek(p->fd, offset, SEEK_SET) == (off_t) -1) {
-		fprintf(stderr, "lseek/read failed\n");
+		ULOG_ERR("lseek/read failed\n");
 		return -1;
 	}
 
 	if (read(p->fd, buf, length) == -1) {
-		fprintf(stderr, "read failed\n");
+		ULOG_ERR("read failed\n");
 		return -1;
 	}
 
@@ -315,13 +315,13 @@ static int mtd_volume_write(struct volume *v, void *buf, int offset, int length)
 		return -1;
 
 	if (lseek(p->fd, offset, SEEK_SET) == (off_t) -1) {
-		fprintf(stderr, "lseek/write failed at offset %d\n", offset);
+		ULOG_ERR("lseek/write failed at offset %d\n", offset);
 		perror("lseek");
 		return -1;
 	}
 
 	if (write(p->fd, buf, length) == -1) {
-		fprintf(stderr, "write failed\n");
+		ULOG_ERR("write failed\n");
 		return -1;
 	}
 

@@ -42,7 +42,7 @@ foreachdir(const char *dir, int (*cb)(const char*))
 	if (dir[strlen(dir) - 1] == '/')
 		snprintf(globdir, 256, "%s*", dir);
 	else
-		snprintf(globdir, 256, "%s/*", dir);
+		snprintf(globdir, 256, "%s/*", dir); /**/
 
 	if (!glob(globdir, GLOB_NOESCAPE | GLOB_MARK | GLOB_ONLYDIR, NULL, &gl))
 		for (j = 0; j < gl.gl_pathc; j++)
@@ -55,12 +55,12 @@ static int
 overlay_mount(struct volume *v, char *fs)
 {
 	if (mkdir("/tmp/overlay", 0755)) {
-		fprintf(stderr, "failed to mkdir /tmp/overlay: %s\n", strerror(errno));
+		ULOG_ERR("failed to mkdir /tmp/overlay: %s\n", strerror(errno));
 		return -1;
 	}
 
 	if (mount(v->blk, "/tmp/overlay", fs, MS_NOATIME, NULL)) {
-		fprintf(stderr, "failed to mount -t %s %s /tmp/overlay: %s\n", fs, v->blk, strerror(errno));
+		ULOG_ERR("failed to mount -t %s %s /tmp/overlay: %s\n", fs, v->blk, strerror(errno));
 		return -1;
 	}
 
@@ -74,7 +74,7 @@ switch2jffs(struct volume *v)
 	int ret;
 
 	if (!stat(SWITCH_JFFS2, &s)) {
-		fprintf(stderr, "jffs2 switch already running\n");
+		ULOG_ERR("jffs2 switch already running\n");
 		return -1;
 	}
 
@@ -82,24 +82,24 @@ switch2jffs(struct volume *v)
 	ret = mount(v->blk, "/rom/overlay", "jffs2", MS_NOATIME, NULL);
 	unlink("/tmp/.switch_jffs2");
 	if (ret) {
-		fprintf(stderr, "failed - mount -t jffs2 %s /rom/overlay: %s\n", v->blk, strerror(errno));
+		ULOG_ERR("failed - mount -t jffs2 %s /rom/overlay: %s\n", v->blk, strerror(errno));
 		return -1;
 	}
 
 	if (mount("none", "/", NULL, MS_NOATIME | MS_REMOUNT, 0)) {
-		fprintf(stderr, "failed - mount -o remount,ro none: %s\n", strerror(errno));
+		ULOG_ERR("failed - mount -o remount,ro none: %s\n", strerror(errno));
 		return -1;
 	}
 
-	system("cp -a /tmp/root/* /rom/overlay");
+	system("cp -a /tmp/root/* /rom/overlay"); /**/
 
 	if (pivot("/rom", "/mnt")) {
-		fprintf(stderr, "failed - pivot /rom /mnt: %s\n", strerror(errno));
+		ULOG_ERR("failed - pivot /rom /mnt: %s\n", strerror(errno));
 		return -1;
 	}
 
 	if (mount_move("/mnt", "/tmp/root", "")) {
-		fprintf(stderr, "failed - mount -o move /mnt /tmp/root %s\n", strerror(errno));
+		ULOG_ERR("failed - mount -o move /mnt /tmp/root %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -152,25 +152,25 @@ jffs2_switch(struct volume *v)
 		return -1;
 
 	if (find_filesystem("overlay")) {
-		fprintf(stderr, "overlayfs not found\n");
+		ULOG_ERR("overlayfs not supported by kernel\n");
 		return ret;
 	}
 
 	mp = find_mount_point(v->blk, 0);
 	if (mp) {
-		fprintf(stderr, "rootfs_data:%s is already mounted as %s\n", v->blk, mp);
+		ULOG_ERR("rootfs_data:%s is already mounted as %s\n", v->blk, mp);
 		return -1;
 	}
 
 	switch (volume_identify(v)) {
 	case FS_NONE:
-		fprintf(stderr, "no jffs2 marker found\n");
+		ULOG_ERR("no jffs2 marker found\n");
 		/* fall through */
 
 	case FS_DEADCODE:
 		ret = switch2jffs(v);
 		if (!ret) {
-			fprintf(stderr, "doing fo cleanup\n");
+			ULOG_INFO("performing overlay whiteout\n");
 			umount2("/tmp/root", MNT_DETACH);
 			foreachdir("/overlay/", handle_whiteout);
 		}
@@ -181,7 +181,7 @@ jffs2_switch(struct volume *v)
 		if (ret)
 			break;
 		if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
-			fprintf(stderr, "switching to jffs2 failed\n");
+			ULOG_ERR("switching to jffs2 failed\n");
 			ret = -1;
 		}
 		break;
@@ -191,7 +191,7 @@ jffs2_switch(struct volume *v)
 		if (ret)
 			break;
 		if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
-			fprintf(stderr, "switching to ubifs failed\n");
+			ULOG_ERR("switching to ubifs failed\n");
 			ret = -1;
 		}
 		break;
@@ -204,7 +204,7 @@ static int overlay_mount_fs(struct volume *v)
 	char *fstype;
 
 	if (mkdir("/tmp/overlay", 0755)) {
-		fprintf(stderr, "failed to mkdir /tmp/overlay: %s\n", strerror(errno));
+		ULOG_ERR("failed to mkdir /tmp/overlay: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -217,8 +217,8 @@ static int overlay_mount_fs(struct volume *v)
 	}
 
 	if (mount(v->blk, "/tmp/overlay", fstype, MS_NOATIME, NULL)) {
-		fprintf(stderr, "failed to mount -t %s %s /tmp/overlay: %s\n",
-				fstype, v->blk, strerror(errno));
+		ULOG_ERR("failed to mount -t %s %s /tmp/overlay: %s\n",
+		         fstype, v->blk, strerror(errno));
 		return -1;
 	}
 
@@ -236,7 +236,7 @@ int mount_overlay(struct volume *v)
 
 	mp = find_mount_point(v->blk, 0);
 	if (mp) {
-		fprintf(stderr, "rootfs_data:%s is already mounted as %s\n", v->blk, mp);
+		ULOG_ERR("rootfs_data:%s is already mounted as %s\n", v->blk, mp);
 		return -1;
 	}
 
@@ -244,13 +244,13 @@ int mount_overlay(struct volume *v)
 
 	extroot_prefix = "/tmp/overlay";
 	if (!mount_extroot()) {
-		fprintf(stderr, "switched to extroot\n");
+		ULOG_INFO("switched to extroot\n");
 		return 0;
 	}
 
-	fprintf(stderr, "switching to overlay\n");
+	ULOG_INFO("switching to overlay\n");
 	if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
-		fprintf(stderr, "switching to jffs2 failed - fallback to ramoverlay\n");
+		ULOG_ERR("switching to jffs2 failed - fallback to ramoverlay\n");
 		return ramoverlay();
 	}
 

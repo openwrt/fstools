@@ -40,12 +40,12 @@ verify_file_hash(char *file, uint32_t *hash)
 	uint32_t md5[4];
 
 	if (md5sum(file, md5)) {
-		fprintf(stderr, "failed to generate md5 sum\n");
+		ULOG_ERR("failed to generate md5 sum\n");
 		return -1;
 	}
 
 	if (memcmp(md5, hash, sizeof(md5))) {
-		fprintf(stderr, "failed to verify hash of %s.\n", file);
+		ULOG_ERR("failed to verify hash of %s.\n", file);
 		return -1;
 	}
 
@@ -62,7 +62,7 @@ snapshot_next_free(struct volume *v, uint32_t *seq)
 
 	do {
 		if (volume_read(v, &hdr, block * v->block_size, sizeof(struct file_header))) {
-			fprintf(stderr, "scanning for next free block failed\n");
+			ULOG_ERR("scanning for next free block failed\n");
 			return 0;
 		}
 
@@ -95,7 +95,7 @@ config_find(struct volume *v, struct file_header *conf, struct file_header *sent
 
 	for (i = (v->size / v->block_size) - 1; i > 0; i--) {
 		if (volume_read(v, sentinel,  i * v->block_size, sizeof(*sentinel))) {
-			fprintf(stderr, "failed to read header\n");
+			ULOG_ERR("failed to read header\n");
 			return -1;
 		}
 		be32_to_hdr(sentinel);
@@ -121,12 +121,12 @@ snapshot_write_file(struct volume *v, int block, char *file, uint32_t seq, uint3
 	int ret = -1;
 
 	if (stat(file, &s) || md5sum(file, md5)) {
-		fprintf(stderr, "stat failed on %s\n", file);
+		ULOG_ERR("stat failed on %s\n", file);
 		goto out;
 	}
 
 	if ((block * v->block_size) + pad_file_size(v, s.st_size) > v->size) {
-		fprintf(stderr, "upgrade is too big for the flash\n");
+		ULOG_ERR("upgrade is too big for the flash\n");
 		goto out;
 	}
 	volume_erase(v, block * v->block_size, pad_file_size(v, s.st_size));
@@ -140,13 +140,13 @@ snapshot_write_file(struct volume *v, int block, char *file, uint32_t seq, uint3
 	hdr_to_be32(&hdr);
 
 	if (volume_write(v, &hdr, block * v->block_size, sizeof(struct file_header))) {
-		fprintf(stderr, "failed to write header\n");
+		ULOG_ERR("failed to write header\n");
 		goto out;
 	}
 
 	in = open(file, O_RDONLY);
 	if (in < 1) {
-		fprintf(stderr, "failed to open %s\n", file);
+		ULOG_ERR("failed to open %s\n", file);
 		goto out;
 	}
 
@@ -175,7 +175,7 @@ snapshot_read_file(struct volume *v, int block, char *file, uint32_t type)
 	int out, offset = 0;
 
 	if (volume_read(v, &hdr, block * v->block_size, sizeof(struct file_header))) {
-		fprintf(stderr, "failed to read header\n");
+		ULOG_ERR("failed to read header\n");
 		return -1;
 	}
 	be32_to_hdr(&hdr);
@@ -191,7 +191,7 @@ snapshot_read_file(struct volume *v, int block, char *file, uint32_t type)
 
 	out = open(file, O_WRONLY | O_CREAT, 0700);
 	if (!out) {
-		fprintf(stderr, "failed to open %s\n", file);
+		ULOG_ERR("failed to open %s\n", file);
 		return -1;
 	}
 
@@ -214,7 +214,7 @@ snapshot_read_file(struct volume *v, int block, char *file, uint32_t type)
 	close(out);
 
 	if (verify_file_hash(file, hdr.md5)) {
-		fprintf(stderr, "md5 verification failed\n");
+		ULOG_ERR("md5 verification failed\n");
 		unlink(file);
 		return 0;
 	}
@@ -232,7 +232,7 @@ sentinel_write(struct volume *v, uint32_t _seq)
 	uint32_t seq;
 
 	if (stat("/tmp/config.tar.gz", &s)) {
-		fprintf(stderr, "failed to stat /tmp/config.tar.gz\n");
+		ULOG_ERR("failed to stat /tmp/config.tar.gz\n");
 		return -1;
 	}
 
@@ -246,9 +246,9 @@ sentinel_write(struct volume *v, uint32_t _seq)
 
 	ret = snapshot_write_file(v, block, "/tmp/config.tar.gz", seq, CONF);
 	if (ret)
-		fprintf(stderr, "failed to write sentinel\n");
+		ULOG_ERR("failed to write sentinel\n");
 	else
-		fprintf(stderr, "wrote /tmp/config.tar.gz sentinel\n");
+		ULOG_INFO("wrote /tmp/config.tar.gz sentinel\n");
 	return ret;
 }
 
@@ -266,9 +266,9 @@ volatile_write(struct volume *v, uint32_t _seq)
 
 	ret = snapshot_write_file(v, block, "/tmp/config.tar.gz", seq, CONF);
 	if (ret)
-		fprintf(stderr, "failed to write /tmp/config.tar.gz\n");
+		ULOG_ERR("failed to write /tmp/config.tar.gz\n");
 	else
-		fprintf(stderr, "wrote /tmp/config.tar.gz\n");
+		ULOG_INFO("wrote /tmp/config.tar.gz\n");
 	return ret;
 }
 
@@ -292,7 +292,7 @@ snapshot_sync(struct volume *v)
 	}
 
 	if (!is_config(&conf) && !is_config(&sentinel)) {
-	//	fprintf(stderr, "no config found\n");
+	//	ULOG_ERR("no config found\n");
 	} else if (((is_config(&conf) && is_config(&sentinel)) &&
 				(memcmp(conf.md5, sentinel.md5, sizeof(conf.md5)) || (conf.seq != sentinel.seq))) ||
 			(is_config(&conf) && !is_config(&sentinel))) {
@@ -301,15 +301,15 @@ snapshot_sync(struct volume *v)
 		int ret = snapshot_read_file(v, next, "/tmp/config.tar.gz", CONF);
 		if (ret > 0) {
 			if (sentinel_write(v, conf.seq))
-				fprintf(stderr, "failed to write sentinel data");
+				ULOG_ERR("failed to write sentinel data");
 		}
 	} else if (!is_config(&conf) && is_config(&sentinel) && next) {
 		int ret = snapshot_read_file(v, block, "/tmp/config.tar.gz", CONF);
 		if (ret > 0)
 			if (volatile_write(v, sentinel.seq))
-				fprintf(stderr, "failed to write sentinel data");
+				ULOG_ERR("failed to write sentinel data");
 	} else
-		fprintf(stderr, "config in sync\n");
+		ULOG_INFO("config in sync\n");
 
 	unlink("/tmp/config.tar.gz");
 

@@ -60,6 +60,7 @@ int mount_extroot(void)
 
 	/* set LD_LIBRARY_PATH env var and load kmods from overlay if we found a lib directory there */
 	if (!stat(ldlib_path, &s) && S_ISDIR(s.st_mode)) {
+		ULOG_INFO("loading kmods from internal overlay\n");
 		setenv("LD_LIBRARY_PATH", ldlib_path, 1);
 		snprintf(kmod_loader, sizeof(kmod_loader),
 		         "/sbin/kmodloader %s/etc/modules-boot.d/", dirname(ldlib_path));
@@ -86,10 +87,10 @@ int mount_extroot(void)
 				mkdir("/tmp/extroot/mnt/rom", 0755);
 
 				if (mount_move("/tmp/extroot", "", "/mnt")) {
-					fprintf(stderr, "moving pivotroot failed - continue normal boot\n");
+					ULOG_ERR("moving pivotroot failed - continue normal boot\n");
 					umount("/tmp/extroot/mnt");
 				} else if (pivot("/mnt", "/rom")) {
-					fprintf(stderr, "switching to pivotroot failed - continue normal boot\n");
+					ULOG_ERR("switching to pivotroot failed - continue normal boot\n");
 					umount("/mnt");
 				} else {
 					umount("/tmp/overlay");
@@ -100,10 +101,10 @@ int mount_extroot(void)
 				}
 			} else if (find_mount("/tmp/extroot/overlay")) {
 				if (mount_move("/tmp/extroot", "", "/overlay")) {
-					fprintf(stderr, "moving extroot failed - continue normal boot\n");
+					ULOG_ERR("moving extroot failed - continue normal boot\n");
 					umount("/tmp/extroot/overlay");
 				} else if (fopivot("/overlay", "/rom")) {
-					fprintf(stderr, "switching to extroot failed - continue normal boot\n");
+					ULOG_ERR("switching to extroot failed - continue normal boot\n");
 					umount("/overlay");
 				} else {
 					umount("/tmp/overlay");

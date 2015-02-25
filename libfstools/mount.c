@@ -48,7 +48,7 @@ mount_move(char *oldroot, char *newroot, char *dir)
 	ret = mount(olddir, newdir, NULL, MS_NOATIME | MS_MOVE, NULL);
 
 /*	if (ret)
-		fprintf(stderr, "failed %s %s: %s\n", olddir, newdir, strerror(errno));*/
+		ULOG_ERR("failed %s %s: %s\n", olddir, newdir, strerror(errno));*/
 
 	return ret;
 }
@@ -67,7 +67,7 @@ pivot(char *new, char *old)
 	ret = pivot_root(new, pivotdir);
 
 	if (ret < 0) {
-		fprintf(stderr, "pivot_root failed %s %s: %s\n", new, pivotdir, strerror(errno));
+		ULOG_ERR("pivot_root failed %s %s: %s\n", new, pivotdir, strerror(errno));
 		return -1;
 	}
 
@@ -85,7 +85,7 @@ fopivot(char *rw_root, char *ro_root)
 	char overlay[64], lowerdir[64];
 
 	if (find_filesystem("overlay")) {
-		fprintf(stderr, "BUG: no suitable fs found\n");
+		ULOG_ERR("BUG: no suitable fs found\n");
 		return -1;
 	}
 
@@ -124,8 +124,8 @@ fopivot(char *rw_root, char *ro_root)
 		/* Mainlined overlayfs has been renamed to "overlay", try that first */
 		if (mount(overlay, "/mnt", "overlay", MS_NOATIME, lowerdir)) {
 			if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, lowerdir)) {
-				fprintf(stderr, "mount failed: %s, options %s\n",
-					strerror(errno), lowerdir);
+				ULOG_ERR("mount failed: %s, options %s\n",
+				         strerror(errno), lowerdir);
 				return -1;
 			}
 		}

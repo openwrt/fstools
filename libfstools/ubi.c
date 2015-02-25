@@ -144,7 +144,7 @@ static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volid
 
 	volname = read_string_from_file(voldir, "name");
 	if (!volname) {
-		fprintf(stderr, "Couldn't read %s/name\n", voldir);
+		ULOG_ERR("Couldn't read %s/name\n", voldir);
 		return -1;
 	}
 

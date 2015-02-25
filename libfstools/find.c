@@ -104,7 +104,7 @@ find_mount_point(char *block, int mtd_only)
 			    strncmp(t, "jffs2", 5) &&
 			    strncmp(t, "ubifs", 5)) {
 				fclose(fp);
-				fprintf(stderr, "block is mounted with wrong fs\n");
+				ULOG_ERR("block is mounted with wrong fs\n");
 				return NULL;
 			}
 			point = p;
@@ -126,7 +126,7 @@ find_filesystem(char *fs)
 	int ret = -1;
 
 	if (!fp) {
-		fprintf(stderr, "opening /proc/filesystems failed: %s\n", strerror(errno));
+		ULOG_ERR("opening /proc/filesystems failed: %s\n", strerror(errno));
 		goto out;
 	}
 
