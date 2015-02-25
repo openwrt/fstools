@@ -15,6 +15,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include <libubox/ulog.h>
+
 #include <fcntl.h>
 #include <dirent.h>
 #include <stdio.h>
@@ -56,7 +58,7 @@ static int
 ask_user(int argc, char **argv)
 {
 	if ((argc < 2) || strcmp(argv[1], "-y")) {
-		fprintf(stderr, "This will erase all settings and remove any installed packages. Are you sure? [N/y]\n");
+		ULOG_WARN("This will erase all settings and remove any installed packages. Are you sure? [N/y]\n");
 		if (getchar() != 'y')
 			return -1;
 	}
@@ -74,23 +76,23 @@ jffs2_reset(int argc, char **argv)
 		return -1;
 
 	if (find_filesystem("overlay")) {
-		fprintf(stderr, "overlayfs not found\n");
+		ULOG_ERR("overlayfs not supported by kernel\n");
 		return -1;
 	}
 
 	v = volume_find("rootfs_data");
 	if (!v) {
-		fprintf(stderr, "no rootfs_data was found\n");
+		ULOG_ERR("MTD partition 'rootfs_data' not found\n");
 		return -1;
 	}
 
 	mp = find_mount_point(v->blk, 1);
 	if (mp) {
-		fprintf(stderr, "%s is mounted as %s, only erasing files\n", v->blk, mp);
+		ULOG_INFO("%s is mounted as %s, only erasing files\n", v->blk, mp);
 		foreachdir(mp, handle_rmdir);
 		mount(mp, "/", NULL, MS_REMOUNT, 0);
 	} else {
-		fprintf(stderr, "%s is not mounted, erasing it\n", v->blk);
+		ULOG_INFO("%s is not mounted, erasing it\n", v->blk);
 		volume_erase_all(v);
 	}
 
@@ -110,14 +112,14 @@ jffs2_mark(int argc, char **argv)
 
 	v = volume_find("rootfs_data");
 	if (!v) {
-		fprintf(stderr, "no rootfs_data was found\n");
+		ULOG_ERR("MTD partition 'rootfs_data' not found\n");
 		return -1;
 	}
 
 	fd = open(v->blk, O_WRONLY);
-	fprintf(stderr, "%s - marking with deadc0de\n", v->blk);
+	ULOG_INFO("%s - marking with deadc0de\n", v->blk);
 	if (!fd) {
-		fprintf(stderr, "opening %s failed\n", v->blk);
+		ULOG_ERR("opening %s failed\n", v->blk);
 		return -1;
 	}
 
@@ -125,7 +127,7 @@ jffs2_mark(int argc, char **argv)
 	close(fd);
 
 	if (sz != 4) {
-		fprintf(stderr, "writing %s failed: %s\n", v->blk, strerror(errno));
+		ULOG_ERR("writing %s failed: %s\n", v->blk, strerror(errno));
 		return -1;
 	}
 
