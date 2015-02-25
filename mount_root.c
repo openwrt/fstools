@@ -54,12 +54,16 @@ start(int argc, char *argv[1])
 	/* There isn't extroot, so just try to mount "rootfs_data" */
 	switch (volume_identify(data)) {
 	case FS_NONE:
+		ULOG_WARN("no usable overlay filesystem found, using tmpfs overlay\n");
+		return ramoverlay();
+
 	case FS_DEADCODE:
 		/*
 		 * Filesystem isn't ready yet and we are in the preinit, so we
 		 * can't afford waiting for it. Use tmpfs for now and handle it
 		 * properly in the "done" call.
 		 */
+		ULOG_NOTE("jffs2 not ready yet, using temporary tmpfs overlay\n");
 		return ramoverlay();
 
 	case FS_JFFS2:
