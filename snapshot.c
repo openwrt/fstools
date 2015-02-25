@@ -30,6 +30,7 @@
 #include <libubox/list.h>
 #include <libubox/blob.h>
 #include <libubox/md5.h>
+#include <libubox/ulog.h>
 
 #include "libfstools/libfstools.h"
 #include "libfstools/volume.h"
@@ -73,7 +74,7 @@ config_read(int argc, char **argv)
 	ret = snapshot_read_file(v, block, "/tmp/config.tar.gz", CONF);
 
 	if (ret < 1)
-		fprintf(stderr, "failed to read /tmp/config.tar.gz\n");
+		ULOG_ERR("failed to read /tmp/config.tar.gz\n");
 
 	return ret;
 }
@@ -94,9 +95,9 @@ snapshot_write(int argc, char **argv)
 
 	ret = snapshot_write_file(v, block, "/tmp/snapshot.tar.gz", seq + 1, DATA);
 	if (ret)
-		fprintf(stderr, "failed to write /tmp/snapshot.tar.gz\n");
+		ULOG_ERR("failed to write /tmp/snapshot.tar.gz\n");
 	else
-		fprintf(stderr, "wrote /tmp/snapshot.tar.gz\n");
+		ULOG_INFO("wrote /tmp/snapshot.tar.gz\n");
 
 	return ret;
 }
@@ -109,20 +110,20 @@ snapshot_mark(int argc, char **argv)
 	size_t sz;
 	int fd;
 
-	fprintf(stderr, "This will remove all snapshot data stored on the system. Are you sure? [N/y]\n");
+	ULOG_WARN("This will remove all snapshot data stored on the system. Are you sure? [N/y]\n");
 	if (getchar() != 'y')
 		return -1;
 
 	v = volume_find("rootfs_data");
 	if (!v) {
-		fprintf(stderr, "no rootfs_data was found\n");
+		ULOG_ERR("MTD partition 'rootfs_data' not found\n");
 		return -1;
 	}
 
 	fd = open(v->blk, O_WRONLY);
-	fprintf(stderr, "%s - marking with 0x%08x\n", v->blk, owrt);
+	ULOG_INFO("%s - marking with 0x%08x\n", v->blk, owrt);
 	if (fd < 0) {
-		fprintf(stderr, "opening %s failed\n", v->blk);
+		ULOG_ERR("opening %s failed\n", v->blk);
 		return -1;
 	}
 
@@ -130,7 +131,7 @@ snapshot_mark(int argc, char **argv)
 	close(fd);
 
 	if (sz != 1) {
-		fprintf(stderr, "writing %s failed: %s\n", v->blk, strerror(errno));
+		ULOG_ERR("writing %s failed: %s\n", v->blk, strerror(errno));
 		return -1;
 	}
 
@@ -150,8 +151,8 @@ snapshot_read(int argc, char **argv)
 	if (argc > 2) {
 		block = atoi(argv[2]);
 		if (block >= (v->size / v->block_size)) {
-			fprintf(stderr, "invalid block %d > %" PRIu64 "\n",
-				block, (uint64_t) v->size / v->block_size);
+			ULOG_ERR("invalid block %d > %" PRIu64 "\n",
+			         block, (uint64_t) v->size / v->block_size);
 			goto out;
 		}
 		snprintf(file, sizeof(file), "/tmp/snapshot/block%d.tar.gz", block);
@@ -179,11 +180,11 @@ snapshot_info(void)
 	if (!v)
 		return -1;
 
-	fprintf(stderr, "sectors:\t%" PRIu64 ", block_size:\t%dK\n",
-		(uint64_t) v->size / v->block_size, v->block_size / 1024);
+	ULOG_INFO("sectors:\t%" PRIu64 ", block_size:\t%dK\n",
+		  (uint64_t) v->size / v->block_size, v->block_size / 1024);
 	do {
 		if (volume_read(v, &hdr, block * v->block_size, sizeof(struct file_header))) {
-			fprintf(stderr, "scanning for next free block failed\n");
+			ULOG_ERR("scanning for next free block failed\n");
 			return 0;
 		}
 
@@ -193,16 +194,16 @@ snapshot_info(void)
 			break;
 
 		if (hdr.type == DATA)
-			fprintf(stderr, "block %d:\tsnapshot entry, size: %d, sectors: %d, sequence: %d\n", block,  hdr.length, pad_file_size(v, hdr.length) / v->block_size, hdr.seq);
+			ULOG_INFO("block %d:\tsnapshot entry, size: %d, sectors: %d, sequence: %d\n", block,  hdr.length, pad_file_size(v, hdr.length) / v->block_size, hdr.seq);
 		else if (hdr.type == CONF)
-			fprintf(stderr, "block %d:\tvolatile entry, size: %d, sectors: %d, sequence: %d\n", block,  hdr.length, pad_file_size(v, hdr.length) / v->block_size, hdr.seq);
+			ULOG_INFO("block %d:\tvolatile entry, size: %d, sectors: %d, sequence: %d\n", block,  hdr.length, pad_file_size(v, hdr.length) / v->block_size, hdr.seq);
 
 		if (hdr.type == DATA && !valid_file_size(hdr.length))
 			block += pad_file_size(v, hdr.length) / v->block_size;
 	} while (hdr.type == DATA);
 	block = config_find(v, &conf, &hdr);
 	if (block > 0)
-		fprintf(stderr, "block %d:\tsentinel entry, size: %d, sectors: %d, sequence: %d\n", block, hdr.length, pad_file_size(v, hdr.length) / v->block_size, hdr.seq);
+		ULOG_INFO("block %d:\tsentinel entry, size: %d, sectors: %d, sequence: %d\n", block, hdr.length, pad_file_size(v, hdr.length) / v->block_size, hdr.seq);
 
 	return 0;
 }
