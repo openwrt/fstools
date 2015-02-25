@@ -21,6 +21,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <libubox/ulog.h>
+
 #include "libubi/libubi-tiny.h"
 
 static int print_usage(void)
@@ -107,12 +109,12 @@ static int volume_find(libubi_t libubi, char *name, char *ret)
 		return -1;
 
 	if (mtd_num2ubi_dev(libubi, index, &ubi)) {
-		fprintf(stderr, "failed to get ubi node for %s\n", name);
+		ULOG_ERR("failed to get ubi node for %s\n", name);
 		return -1;
 	}
 
 	if (ubi_get_vol_info1_nm(libubi, ubi, name, &vol)) {
-		fprintf(stderr, "failed to get ubi volume info for %s\n", name);
+		ULOG_ERR("failed to get ubi volume info for %s\n", name);
 		return -1;
 	}
 
@@ -135,19 +137,19 @@ static int main_detach(char *type)
 		return print_usage();
 
 	if (err) {
-		fprintf(stderr, "failed to find mtd partition %s_ubi\n", type);
+		ULOG_ERR("MTD partition '%s_ubi' not found\n", type);
 		return -1;
 	}
 
 	libubi = libubi_open();
 	if (!libubi) {
-		fprintf(stderr, "cannot open libubi");
+		ULOG_ERR("cannot open libubi");
 		return -1;
 	}
 
 	err = ubidetach(libubi, mtd);
 	if (err) {
-		fprintf(stderr, "cannot detach \"%s\"", mtd);
+		ULOG_ERR("cannot detach \"%s\"", mtd);
 		return -1;
 	}
 
@@ -167,7 +169,7 @@ static int main_image(char *partition, char *image, char *overlay)
 	char *data = NULL;
 
 	if (stat(image, &s)) {
-		fprintf(stderr, "image not found %s\n", image);
+		ULOG_ERR("image not found %s\n", image);
 		return -1;
 	}
 
@@ -181,7 +183,7 @@ static int main_image(char *partition, char *image, char *overlay)
 
 	libubi = libubi_open();
 	if (!libubi) {
-		fprintf(stderr, "cannot open libubi");
+		ULOG_ERR("cannot open libubi");
 		return -1;
 	}
 
@@ -190,7 +192,7 @@ static int main_image(char *partition, char *image, char *overlay)
 	else
 		err = mtd_find("rootfs_ubi", mtd);
 	if (err) {
-		fprintf(stderr, "failed to find mtd parent %s_ubi\n", partition);
+		ULOG_ERR("MTD partition '%s_ubi' not found\n", partition);
 		return -1;
 	}
 
@@ -199,51 +201,51 @@ static int main_image(char *partition, char *image, char *overlay)
 	else
 		err = ubi_find(libubi, "rootfs_ubi", node);
 	if (err) {
-		fprintf(stderr, "failed to find ubi volume %s\n", partition);
+		ULOG_ERR("UBI volume '%s' not found\n", partition);
 		return -1;
 	}
 
 	err = ubidetach(libubi, mtd);
 	if (err) {
-		fprintf(stderr, "cannot detach \"%s\"", mtd);
+		ULOG_ERR("cannot detach \"%s\"", mtd);
 		return -1;
 	}
 
 	err = ubiattach(libubi, mtd);
 	if (err) {
-		fprintf(stderr, "cannot attach \"%s\"", mtd);
+		ULOG_ERR("cannot attach \"%s\"", mtd);
 		return -1;
 	}
 
 	if (data) {
 		err = ubirmvol(libubi, node, overlay);
 		if (err) {
-			fprintf(stderr, "cannot remove \"%s\"", node);
+			ULOG_ERR("cannot remove \"%s\"", node);
 			return -1;
 		}
 	}
 
 	if (volume_find(libubi, partition, volume) < 0) {
-		fprintf(stderr, "failed to find ubi volume %s\n", partition);
+		ULOG_ERR("UBI volume '%s' not found\n", partition);
 		return -1;
 	}
 
 	err = ubirsvol(libubi, node, partition, s.st_size);
 	if (err) {
-		fprintf(stderr, "cannot resize \"%s\"", partition);
+		ULOG_ERR("cannot resize \"%s\"", partition);
 		return -1;
 	}
 
 	err = ubiupdatevol(libubi, volume, image);
 	if (err) {
-		fprintf(stderr, "cannot update \"%s\"", volume);
+		ULOG_ERR("cannot update \"%s\"", volume);
 		return -1;
 	}
 
 	if (overlay) {
 		err = ubimkvol(libubi, node, overlay, 1);
 		if (err) {
-			fprintf(stderr, "cannot make \"%s\"", overlay);
+			ULOG_ERR("cannot make \"%s\"", overlay);
 			return -1;
 		}
 	}
@@ -261,12 +263,12 @@ static int main_info(void)
 
 	libubi = libubi_open();
 	if (!libubi) {
-		fprintf(stderr, "cannot open libubi");
+		ULOG_ERR("cannot open libubi");
 		return -1;
 	}
 
 	if (ubi_get_info(libubi, &info)) {
-		fprintf(stderr, "failed to get info\n");
+		ULOG_ERR("failed to get info\n");
 		return -1;
 	}
 
@@ -279,7 +281,7 @@ static int main_info(void)
 		if (ubi_get_dev_info(libubi, ubi, &dinfo))
 			continue;
 		printf("device - %s\n  size: %lldBytes\n  bad blocks: %d\n",
-			&ubi[5], dinfo.total_bytes, dinfo.bad_count);
+		       &ubi[5], dinfo.total_bytes, dinfo.bad_count);
 		for (j = dinfo.lowest_vol_id; j <= dinfo.highest_vol_id; j++) {
 			struct ubi_vol_info vinfo;
 
