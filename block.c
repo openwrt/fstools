@@ -32,6 +32,7 @@
 #include <uci.h>
 #include <uci_blob.h>
 
+#include <libubox/ulog.h>
 #include <libubox/list.h>
 #include <libubox/vlist.h>
 #include <libubox/blobmsg_json.h>
@@ -42,37 +43,6 @@
 #ifdef UBIFS_EXTROOT
 #include "libubi/libubi.h"
 #endif
-
-static int kmsg = 0;
-
-static void klog(int prio, const char *fmt, ...)
-{
-	va_list ap;
-	FILE *f = fopen("/dev/kmsg", "w");
-
-	if (f) {
-		fprintf(f, "<%d>", prio);
-
-		va_start(ap, fmt);
-		vfprintf(f, fmt, ap);
-		va_end(ap);
-
-		fclose(f);
-	}
-}
-
-#define KINFO(fmt, ...) do { \
-		if (kmsg) klog(LOG_INFO, "block: " fmt, ## __VA_ARGS__); \
-	} while (0)
-
-#define ERROR(fmt, ...) do { \
-		if (kmsg) \
-			klog(LOG_ERR, "block: " fmt, ## __VA_ARGS__); \
-		else { \
-			syslog(LOG_ERR, fmt, ## __VA_ARGS__); \
-			fprintf(stderr, "block: "fmt, ## __VA_ARGS__); \
-		} \
-	} while (0)
 
 enum {
 	TYPE_MOUNT,
@@ -432,11 +402,11 @@ static struct uci_package * config_try_load(struct uci_context *ctx, char *path)
 	struct uci_package *pkg;
 
 	uci_set_confdir(ctx, dir);
-	KINFO("attempting to load %s/%s\n", dir, file);
+	ULOG_INFO("attempting to load %s/%s\n", dir, file);
 
 	if (uci_load(ctx, file, &pkg)) {
 		uci_get_errorstr(ctx, &err, file);
-		ERROR("unable to load configuration (%s)\n", err);
+		ULOG_ERR("unable to load configuration (%s)\n", err);
 
 		free(err);
 		return NULL;
@@ -470,7 +440,7 @@ static int config_load(char *cfg)
 	}
 
 	if (!pkg) {
-		ERROR("no usable configuration\n");
+		ULOG_ERR("no usable configuration\n");
 		return -1;
 	}
 
@@ -657,12 +627,12 @@ static void check_filesystem(struct blkid_struct_probe *pr)
 		return;
 
 	if (strncmp(pr->id->name, "ext", 3)) {
-		ERROR("check_filesystem: %s is not supported\n", pr->id->name);
+		ULOG_ERR("check_filesystem: %s is not supported\n", pr->id->name);
 		return;
 	}
 
 	if (stat(e2fsck, &statbuf) < 0) {
-		ERROR("check_filesystem: %s not found\n", e2fsck);
+		ULOG_ERR("check_filesystem: %s not found\n", e2fsck);
 		return;
 	}
 
@@ -675,7 +645,7 @@ static void check_filesystem(struct blkid_struct_probe *pr)
 
 		waitpid(pid, &status, 0);
 		if (WEXITSTATUS(status))
-			ERROR("check_filesystem: %s returned %d\n", e2fsck, WEXITSTATUS(status));
+			ULOG_ERR("check_filesystem: %s returned %d\n", e2fsck, WEXITSTATUS(status));
 	}
 }
 
@@ -733,7 +703,7 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 		return -1;
 
 	if (find_mount_point(pr->dev)) {
-		ERROR("%s is already mounted\n", pr->dev);
+		ULOG_ERR("%s is already mounted\n", pr->dev);
 		return -1;
 	}
 
@@ -758,8 +728,8 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 		err = mount(pr->dev, target, pr->id->name, m->flags,
 		            (m->options) ? (m->options) : (""));
 		if (err)
-			ERROR("mounting %s (%s) as %s failed (%d) - %s\n",
-			      pr->dev, pr->id->name, target, err, strerror(err));
+			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %s\n",
+			         pr->dev, pr->id->name, target, err, strerror(err));
 		else
 			handle_swapfiles(true);
 		return err;
@@ -777,8 +747,8 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 
 		err = mount(pr->dev, target, pr->id->name, 0, "");
 		if (err)
-			ERROR("mounting %s (%s) as %s failed (%d) - %s\n",
-					pr->dev, pr->id->name, target, err, strerror(err));
+			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %s\n",
+			         pr->dev, pr->id->name, target, err, strerror(err));
 		else
 			handle_swapfiles(true);
 		return err;
@@ -810,11 +780,11 @@ static int umount_device(struct blkid_struct_probe *pr)
 
 	err = umount2(mp, MNT_DETACH);
 	if (err)
-		ERROR("unmounting %s (%s)  failed (%d) - %s\n",
-			pr->dev, mp, err, strerror(err));
+		ULOG_ERR("unmounting %s (%s)  failed (%d) - %s\n",
+		         pr->dev, mp, err, strerror(err));
 	else
-		ERROR("unmounted %s (%s)\n",
-			pr->dev, mp);
+		ULOG_INFO("unmounted %s (%s)\n",
+		          pr->dev, mp);
 
 	return err;
 }
@@ -838,12 +808,12 @@ static int main_hotplug(int argc, char **argv)
 			err = umount2(mount_point, MNT_DETACH);
 
 		if (err)
-			ERROR("umount of %s failed (%d) - %s\n",
-					mount_point, err, strerror(err));
+			ULOG_ERR("umount of %s failed (%d) - %s\n",
+			         mount_point, err, strerror(err));
 
 		return 0;
 	} else if (strcmp(action, "add")) {
-		ERROR("Unkown action %s\n", action);
+		ULOG_ERR("Unkown action %s\n", action);
 
 		return -1;
 	}
@@ -1012,7 +982,7 @@ static int check_extroot(char *path)
 #else
 	if (find_block_mtd("rootfs", devpath, sizeof(devpath))) {
 		if (find_root_dev(devpath, sizeof(devpath))) {
-			ERROR("extroot: unable to determine root device\n");
+			ULOG_ERR("extroot: unable to determine root device\n");
 			return -1;
 		}
 	}
@@ -1033,8 +1003,8 @@ static int check_extroot(char *path)
 			if (stat(tag, &s)) {
 				fp = fopen(tag, "w+");
 				if (!fp) {
-					ERROR("extroot: failed to write UUID to %s: %d (%s)\n",
-					      tag, errno, strerror(errno));
+					ULOG_ERR("extroot: failed to write UUID to %s: %d (%s)\n",
+					         tag, errno, strerror(errno));
 					/* return 0 to continue boot regardless of error */
 					return 0;
 				}
@@ -1045,8 +1015,8 @@ static int check_extroot(char *path)
 
 			fp = fopen(tag, "r");
 			if (!fp) {
-				ERROR("extroot: failed to read UUID from %s: %d (%s)\n",
-				      tag, errno, strerror(errno));
+				ULOG_ERR("extroot: failed to read UUID from %s: %d (%s)\n",
+				         tag, errno, strerror(errno));
 				return -1;
 			}
 
@@ -1056,13 +1026,13 @@ static int check_extroot(char *path)
 			if (!strcasecmp(uuid, pr->uuid))
 				return 0;
 
-			ERROR("extroot: UUID mismatch (root: %s, %s: %s)\n",
-			      pr->uuid, basename(path), uuid);
+			ULOG_ERR("extroot: UUID mismatch (root: %s, %s: %s)\n",
+			         pr->uuid, basename(path), uuid);
 			return -1;
 		}
 	}
 
-	ERROR("extroot: unable to lookup root device %s\n", devpath);
+	ULOG_ERR("extroot: unable to lookup root device %s\n", devpath);
 	return -1;
 }
 
@@ -1089,7 +1059,7 @@ static int mount_extroot(char *cfg)
 
 	if (!m || !m->extroot)
 	{
-		KINFO("extroot: not configured\n");
+		ULOG_INFO("extroot: not configured\n");
 		return -1;
 	}
 
@@ -1097,7 +1067,7 @@ static int mount_extroot(char *cfg)
 	pr = find_block_info(m->uuid, m->label, m->device);
 
 	if (!pr && delay_root){
-		KINFO("extroot: device not present, retrying in %u seconds\n", delay_root);
+		ULOG_INFO("extroot: device not present, retrying in %u seconds\n", delay_root);
 		sleep(delay_root);
 		mkblkdev();
 		cache_load(0);
@@ -1106,12 +1076,12 @@ static int mount_extroot(char *cfg)
 	if (pr) {
 		if (strncmp(pr->id->name, "ext", 3) &&
 		    strncmp(pr->id->name, "ubifs", 5)) {
-			ERROR("extroot: unsupported filesystem %s, try ext4\n", pr->id->name);
+			ULOG_ERR("extroot: unsupported filesystem %s, try ext4\n", pr->id->name);
 			return -1;
 		}
 
 		if (test_fs_support(pr->id->name)) {
-			ERROR("extroot: filesystem %s not supported by kernel\n", pr->id->name);
+			ULOG_ERR("extroot: filesystem %s not supported by kernel\n", pr->id->name);
 			return -1;
 		}
 
@@ -1125,17 +1095,17 @@ static int mount_extroot(char *cfg)
 		err = mount(pr->dev, path, pr->id->name, 0, (m->options) ? (m->options) : (""));
 
 		if (err) {
-			ERROR("extroot: mounting %s (%s) on %s failed: %d (%s)\n",
-			      pr->dev, pr->id->name, path, err, strerror(err));
+			ULOG_ERR("extroot: mounting %s (%s) on %s failed: %d (%s)\n",
+			         pr->dev, pr->id->name, path, err, strerror(err));
 		} else if (m->overlay) {
 			err = check_extroot(path);
 			if (err)
 				umount(path);
 		}
 	} else {
-		ERROR("extroot: cannot find device %s%s\n",
-		      (m->uuid ? "with UUID " : (m->label ? "with label " : "")),
-		      (m->uuid ? m->uuid : (m->label ? m->label : m->device)));
+		ULOG_ERR("extroot: cannot find device %s%s\n",
+		         (m->uuid ? "with UUID " : (m->label ? "with label " : "")),
+		         (m->uuid ? m->uuid : (m->label ? m->label : m->device)));
 	}
 
 	return err;
@@ -1154,14 +1124,15 @@ static int main_extroot(int argc, char **argv)
 		return -1;
 
 	if (argc != 2) {
-		fprintf(stderr, "Usage: block extroot\n");
+		ULOG_ERR("Usage: block extroot\n");
 		return -1;
 	}
 
-	kmsg = 1;
-
 	mkblkdev();
 	cache_load(1);
+
+	/* enable LOG_INFO messages */
+	ulog_threshold(LOG_INFO);
 
 	/*
 	 * Look for "rootfs_data". We will want to mount it and check for
@@ -1283,11 +1254,11 @@ static int main_info(int argc, char **argv)
 		struct stat s;
 
 		if (stat(argv[i], &s)) {
-			ERROR("failed to stat %s\n", argv[i]);
+			ULOG_ERR("failed to stat %s\n", argv[i]);
 			continue;
 		}
 		if (!S_ISBLK(s.st_mode)) {
-			ERROR("%s is not a block device\n", argv[i]);
+			ULOG_ERR("%s is not a block device\n", argv[i]);
 			continue;
 		}
 		pr = find_block_info(NULL, NULL, argv[i]);
@@ -1327,7 +1298,7 @@ static int main_swapon(int argc, char **argv)
 			lineptr = NULL;
 
 			if (!fp) {
-				ERROR("failed to open /proc/swaps\n");
+				ULOG_ERR("failed to open /proc/swaps\n");
 				return -1;
 			}
 			while (getline(&lineptr, &s, fp) > 0)
@@ -1342,7 +1313,7 @@ static int main_swapon(int argc, char **argv)
 				if (strcmp(pr->id->name, "swap"))
 					continue;
 				if (swapon(pr->dev, 0))
-					ERROR("failed to swapon %s\n", pr->dev);
+					ULOG_ERR("failed to swapon %s\n", pr->dev);
 			}
 			return 0;
 		case 'p':
@@ -1360,12 +1331,12 @@ static int main_swapon(int argc, char **argv)
 		return swapon_usage();
 
 	if (stat(argv[optind], &st) || (!S_ISBLK(st.st_mode) && !S_ISREG(st.st_mode))) {
-		ERROR("%s is not a block device or file\n", argv[optind]);
+		ULOG_ERR("%s is not a block device or file\n", argv[optind]);
 		return -1;
 	}
 	err = swapon(argv[optind], flags);
 	if (err) {
-		ERROR("failed to swapon %s (%d)\n", argv[optind], err);
+		ULOG_ERR("failed to swapon %s (%d)\n", argv[optind], err);
 		return err;
 	}
 
@@ -1375,7 +1346,7 @@ static int main_swapon(int argc, char **argv)
 static int main_swapoff(int argc, char **argv)
 {
 	if (argc != 2) {
-		ERROR("Usage: swapoff [-a] [DEVICE]\n\n"
+		ULOG_ERR("Usage: swapoff [-a] [DEVICE]\n\n"
 			"\tStop swapping on DEVICE\n"
 			" -a\tStop swapping on all swap devices\n");
 		return -1;
@@ -1386,7 +1357,7 @@ static int main_swapoff(int argc, char **argv)
 		char line[256];
 
 		if (!fp) {
-			ERROR("failed to open /proc/swaps\n");
+			ULOG_ERR("failed to open /proc/swaps\n");
 			return -1;
 		}
 		fgets(line, sizeof(line), fp);
@@ -1399,7 +1370,7 @@ static int main_swapoff(int argc, char **argv)
 			*end = '\0';
 			err = swapoff(line);
 			if (err)
-				ERROR("failed to swapoff %s (%d)\n", line, err);
+				ULOG_ERR("failed to swapoff %s (%d)\n", line, err);
 		}
 		fclose(fp);
 	} else {
@@ -1407,12 +1378,12 @@ static int main_swapoff(int argc, char **argv)
 		int err;
 
 		if (stat(argv[1], &s) || (!S_ISBLK(s.st_mode) && !S_ISREG(s.st_mode))) {
-			ERROR("%s is not a block device or file\n", argv[1]);
+			ULOG_ERR("%s is not a block device or file\n", argv[1]);
 			return -1;
 		}
 		err = swapoff(argv[1]);
 		if (err) {
-			ERROR("fsiled to swapoff %s (%d)\n", argv[1], err);
+			ULOG_ERR("failed to swapoff %s (%d)\n", argv[1], err);
 			return err;
 		}
 	}
@@ -1425,6 +1396,9 @@ int main(int argc, char **argv)
 	char *base = basename(*argv);
 
 	umask(0);
+
+	ulog_open(-1, -1, "block");
+	ulog_threshold(LOG_NOTICE);
 
 	if (!strcmp(base, "swapon"))
 		return main_swapon(argc, argv);
@@ -1452,7 +1426,7 @@ int main(int argc, char **argv)
 			return main_umount(argc, argv);
 	}
 
-	fprintf(stderr, "Usage: block <info|mount|umount|detect>\n");
+	ULOG_ERR("Usage: block <info|mount|umount|detect>\n");
 
 	return -1;
 }
