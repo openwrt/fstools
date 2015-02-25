@@ -935,7 +935,8 @@ static int find_block_ubi_RO(libubi_t libubi, char *name, char *part, int plen)
 
 	return err;
 }
-#endif
+
+#else
 
 static int find_root_dev(char *buf, int len)
 {
@@ -965,6 +966,8 @@ static int find_root_dev(char *buf, int len)
 	closedir(d);
 	return -1;
 }
+
+#endif
 
 static int test_fs_support(const char *name)
 {
