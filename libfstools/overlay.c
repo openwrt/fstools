@@ -32,6 +32,38 @@
 
 #define SWITCH_JFFS2 "/tmp/.switch_jffs2"
 
+static bool keep_sysupgrade;
+
+static int
+handle_rmdir(const char *dir)
+{
+	struct dirent *dt;
+	struct stat st;
+	DIR *d;
+	int fd;
+
+	d = opendir(dir);
+	if (!d)
+		return -1;
+
+	fd = dirfd(d);
+
+	while ((dt = readdir(d)) != NULL) {
+		if (fstatat(fd, dt->d_name, &st, AT_SYMLINK_NOFOLLOW) || S_ISDIR(st.st_mode))
+			continue;
+
+		if (keep_sysupgrade && !strcmp(dt->d_name, "sysupgrade.tgz"))
+			continue;
+
+		unlinkat(fd, dt->d_name, 0);
+	}
+
+	closedir(d);
+	rmdir(dir);
+
+	return 0;
+}
+
 void
 foreachdir(const char *dir, int (*cb)(const char*))
 {
@@ -49,6 +81,13 @@ foreachdir(const char *dir, int (*cb)(const char*))
 			foreachdir(gl.gl_pathv[j], cb);
 
 	cb(dir);
+}
+
+void
+overlay_delete(const char *dir, bool _keep_sysupgrade)
+{
+	keep_sysupgrade = _keep_sysupgrade;
+	foreachdir(dir, handle_rmdir);
 }
 
 static int

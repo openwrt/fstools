@@ -48,4 +48,6 @@ extern int jffs2_switch(struct volume *v);
 extern int handle_whiteout(const char *dir);
 extern void foreachdir(const char *dir, int (*cb)(const char*));
 
+extern void overlay_delete(const char *dir, bool keep_sysupgrade);
+
 #endif

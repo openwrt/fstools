@@ -28,33 +28,6 @@
 #include "libfstools/volume.h"
 
 static int
-handle_rmdir(const char *dir)
-{
-	struct dirent *dt;
-	struct stat st;
-	DIR *d;
-	int fd;
-
-	d = opendir(dir);
-	if (!d)
-		return -1;
-
-	fd = dirfd(d);
-
-	while ((dt = readdir(d)) != NULL) {
-		if (fstatat(fd, dt->d_name, &st, AT_SYMLINK_NOFOLLOW) || S_ISDIR(st.st_mode))
-			continue;
-
-		unlinkat(fd, dt->d_name, 0);
-	}
-
-	closedir(d);
-	rmdir(dir);
-
-	return 0;
-}
-
-static int
 ask_user(int argc, char **argv)
 {
 	if ((argc < 2) || strcmp(argv[1], "-y")) {
@@ -89,7 +62,7 @@ jffs2_reset(int argc, char **argv)
 	mp = find_mount_point(v->blk, 1);
 	if (mp) {
 		ULOG_INFO("%s is mounted as %s, only erasing files\n", v->blk, mp);
-		foreachdir(mp, handle_rmdir);
+		overlay_delete(mp, false);
 		mount(mp, "/", NULL, MS_REMOUNT, 0);
 	} else {
 		ULOG_INFO("%s is not mounted, erasing it\n", v->blk);
