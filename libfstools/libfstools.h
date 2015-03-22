@@ -28,6 +28,13 @@ enum {
 	FS_UBIFS,
 };
 
+enum fs_state {
+	FS_STATE_UNKNOWN,
+	FS_STATE_PENDING,
+	FS_STATE_READY,
+	__FS_STATE_LAST = FS_STATE_READY,
+};
+
 extern char const *extroot_prefix;
 extern int mount_extroot(void);
 extern int mount_snapshot(struct volume *v);
@@ -49,5 +56,8 @@ extern int handle_whiteout(const char *dir);
 extern void foreachdir(const char *dir, int (*cb)(const char*));
 
 extern void overlay_delete(const char *dir, bool keep_sysupgrade);
+
+enum fs_state fs_state_get(const char *dir);
+int fs_state_set(const char *dir, enum fs_state state);
 
 #endif

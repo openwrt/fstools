@@ -103,6 +103,11 @@ done(int argc, char *argv[1])
 	case FS_NONE:
 	case FS_DEADCODE:
 		return jffs2_switch(v);
+
+	case FS_JFFS2:
+	case FS_UBIFS:
+		fs_state_set("/overlay", FS_STATE_READY);
+		break;
 	}
 
 	return 0;

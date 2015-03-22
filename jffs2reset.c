@@ -62,6 +62,7 @@ jffs2_reset(int argc, char **argv)
 	mp = find_mount_point(v->blk, 1);
 	if (mp) {
 		ULOG_INFO("%s is mounted as %s, only erasing files\n", v->blk, mp);
+		fs_state_set("/overlay", FS_STATE_PENDING);
 		overlay_delete(mp, false);
 		mount(mp, "/", NULL, MS_REMOUNT, 0);
 	} else {

@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/mount.h>
+#include <sys/syscall.h>
 
 #include <asm/byteorder.h>
 
@@ -33,6 +34,18 @@
 #define SWITCH_JFFS2 "/tmp/.switch_jffs2"
 
 static bool keep_sysupgrade;
+
+static ssize_t
+fs_getxattr(const char *path, const char *name, void *value, size_t size)
+{
+	return syscall(__NR_getxattr, path, name, value, size);
+}
+
+static ssize_t
+fs_setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
+{
+	return syscall(__NR_setxattr, path, name, value, size, flags);
+}
 
 static int
 handle_rmdir(const char *dir)
@@ -235,7 +248,13 @@ jffs2_switch(struct volume *v)
 		}
 		break;
 	}
-	return ret;
+
+	if (ret)
+		return ret;
+
+	sync();
+	fs_state_set("/overlay", FS_STATE_READY);
+	return 0;
 }
 
 static int overlay_mount_fs(struct volume *v)
@@ -266,6 +285,28 @@ static int overlay_mount_fs(struct volume *v)
 	return -1;
 }
 
+enum fs_state fs_state_get(const char *dir)
+{
+	uint32_t val;
+
+	if (fs_getxattr(dir, "user.fs_state", &val, sizeof(val)) != sizeof(val))
+		return FS_STATE_UNKNOWN;
+
+	if (val > __FS_STATE_LAST)
+		return FS_STATE_UNKNOWN;
+
+	return val;
+}
+
+
+int fs_state_set(const char *dir, enum fs_state state)
+{
+	uint32_t val = state;
+
+	return fs_setxattr(dir, "user.fs_state", &val, sizeof(val), 0);
+}
+
+
 int mount_overlay(struct volume *v)
 {
 	char *mp;
@@ -285,6 +326,21 @@ int mount_overlay(struct volume *v)
 	if (!mount_extroot()) {
 		ULOG_INFO("switched to extroot\n");
 		return 0;
+	}
+
+	switch(fs_state_get("/tmp/overlay")) {
+	case FS_STATE_UNKNOWN:
+		fs_state_set("/tmp/overlay", FS_STATE_PENDING);
+		if (fs_state_get("/tmp/overlay") != FS_STATE_PENDING) {
+			ULOG_ERR("unable to set filesystem state\n");
+			break;
+		}
+	case FS_STATE_PENDING:
+		ULOG_INFO("overlay filesystem has not been fully initialized yet\n");
+		overlay_delete("/tmp/overlay", true);
+		break;
+	case FS_STATE_READY:
+		break;
 	}
 
 	ULOG_INFO("switching to jffs2 overlay\n");
