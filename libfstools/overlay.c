@@ -255,13 +255,13 @@ static int overlay_mount_fs(struct volume *v)
 		break;
 	}
 
+	volume_init(v);
+
 	if (mount(v->blk, "/tmp/overlay", fstype, MS_NOATIME, NULL)) {
 		ULOG_ERR("failed to mount -t %s %s /tmp/overlay: %s\n",
 		         fstype, v->blk, strerror(errno));
 		return -1;
 	}
-
-	volume_init(v);
 
 	return -1;
 }
