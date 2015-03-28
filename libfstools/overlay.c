@@ -143,7 +143,10 @@ switch2jffs(struct volume *v)
 		return -1;
 	}
 
-	system("cp -a /tmp/root/* /rom/overlay"); /**/
+	if (system("cp -a /tmp/root/* /rom/overlay")) {
+		ULOG_ERR("failed - cp -a /tmp/root/* /rom/overlay: %s\n", strerror(errno));
+		return -1;
+	}
 
 	if (pivot("/rom", "/mnt")) {
 		ULOG_ERR("failed - pivot /rom /mnt: %s\n", strerror(errno));

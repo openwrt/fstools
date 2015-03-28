@@ -64,7 +64,8 @@ int mount_extroot(void)
 		setenv("LD_LIBRARY_PATH", ldlib_path, 1);
 		snprintf(kmod_loader, sizeof(kmod_loader),
 		         "/sbin/kmodloader %s/etc/modules-boot.d/", dirname(ldlib_path));
-		system(kmod_loader);
+		if (system(kmod_loader))
+			ULOG_ERR("failed to launch kmodloader from internal overlay\n");
 	}
 
 	pid = fork();

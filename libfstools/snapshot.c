@@ -329,13 +329,19 @@ mount_snapshot(struct volume *v)
 	snapshot_sync(v);
 	setenv("SNAPSHOT", "magic", 1);
 	_ramoverlay("/rom", "/overlay");
-	system("/sbin/snapshot unpack");
+	if (system("/sbin/snapshot unpack") == -1) {
+		perror("system");
+		return -1;
+	}
 	foreachdir("/overlay/", handle_whiteout);
 	mkdir("/volatile", 0700);
 	_ramoverlay("/rom", "/volatile");
 	mount_move("/rom/volatile", "/volatile", "");
 	mount_move("/rom/rom", "/rom", "");
-	system("/sbin/snapshot config_unpack");
+	if (system("/sbin/snapshot config_unpack")) {
+		perror("system");
+		return -1;
+	}
 	foreachdir("/volatile/", handle_whiteout);
 	unsetenv("SNAPSHOT");
 	return -1;

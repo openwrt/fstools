@@ -1020,10 +1020,12 @@ static int check_extroot(char *path)
 				return -1;
 			}
 
-			fgets(uuid, sizeof(uuid), fp);
+			if (!fgets(uuid, sizeof(uuid), fp))
+				ULOG_ERR("extroot: failed to read UUID from %s: %d (%s)\n",
+				         tag, errno, strerror(errno));
 			fclose(fp);
 
-			if (!strcasecmp(uuid, pr->uuid))
+			if (*uuid || !strcasecmp(uuid, pr->uuid))
 				return 0;
 
 			ULOG_ERR("extroot: UUID mismatch (root: %s, %s: %s)\n",
@@ -1360,18 +1362,18 @@ static int main_swapoff(int argc, char **argv)
 			ULOG_ERR("failed to open /proc/swaps\n");
 			return -1;
 		}
-		fgets(line, sizeof(line), fp);
-		while (fgets(line, sizeof(line), fp)) {
-			char *end = strchr(line, ' ');
-			int err;
+		if (fgets(line, sizeof(line), fp))
+			while (fgets(line, sizeof(line), fp)) {
+				char *end = strchr(line, ' ');
+				int err;
 
-			if (!end)
-				continue;
-			*end = '\0';
-			err = swapoff(line);
-			if (err)
-				ULOG_ERR("failed to swapoff %s (%d)\n", line, err);
-		}
+				if (!end)
+					continue;
+				*end = '\0';
+				err = swapoff(line);
+				if (err)
+					ULOG_ERR("failed to swapoff %s (%d)\n", line, err);
+			}
 		fclose(fp);
 	} else {
 		struct stat s;

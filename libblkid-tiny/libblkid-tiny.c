@@ -197,7 +197,8 @@ int probe_block(char *block, struct blkid_struct_probe *pr)
 			char magic[32] = { 0 };
 
 			lseek(pr->fd, off, SEEK_SET);
-			read(pr->fd, magic, mag->len);
+			if (read(pr->fd, magic, mag->len) < 0)
+				return -1;
 
 			DEBUG("magic: %s %s %d\n", mag->magic, magic, mag->len);
 			if (!memcmp(mag->magic, magic, mag->len))

@@ -88,7 +88,6 @@ int mkblkdev(void)
 
 	mode = 0600;
 	find_devs(true);
-	chdir("/");
 
-	return 0;
+	return chdir("/");
 }
