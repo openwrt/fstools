@@ -969,7 +969,7 @@ static int check_extroot(char *path)
 	char devpath[32];
 
 #ifdef UBIFS_EXTROOT
-	if (find_block_mtd("rootfs", devpath, sizeof(devpath))) {
+	if (find_block_mtd("\"rootfs\"", devpath, sizeof(devpath))) {
 		int err = -1;
 		libubi_t libubi;
 
@@ -980,7 +980,7 @@ static int check_extroot(char *path)
 			return -1;
 	}
 #else
-	if (find_block_mtd("rootfs", devpath, sizeof(devpath))) {
+	if (find_block_mtd("\"rootfs\"", devpath, sizeof(devpath))) {
 		if (find_root_dev(devpath, sizeof(devpath))) {
 			ULOG_ERR("extroot: unable to determine root device\n");
 			return -1;
@@ -1142,7 +1142,7 @@ static int main_extroot(int argc, char **argv)
 	 */
 
 	/* Start with looking for MTD partition */
-	find_block_mtd("rootfs_data", blkdev_path, sizeof(blkdev_path));
+	find_block_mtd("\"rootfs_data\"", blkdev_path, sizeof(blkdev_path));
 	if (blkdev_path[0]) {
 		pr = find_block_info(NULL, NULL, blkdev_path);
 		if (pr && !strcmp(pr->id->name, "jffs2")) {
