@@ -39,25 +39,9 @@ ask_user(int argc, char **argv)
 
 }
 
-static int
-jffs2_reset(int argc, char **argv)
+static int jffs2_reset(struct volume *v)
 {
-	struct volume *v;
 	char *mp;
-
-	if (ask_user(argc, argv))
-		return -1;
-
-	if (find_filesystem("overlay")) {
-		ULOG_ERR("overlayfs not supported by kernel\n");
-		return -1;
-	}
-
-	v = volume_find("rootfs_data");
-	if (!v) {
-		ULOG_ERR("MTD partition 'rootfs_data' not found\n");
-		return -1;
-	}
 
 	mp = find_mount_point(v->blk, 1);
 	if (mp) {
@@ -73,22 +57,11 @@ jffs2_reset(int argc, char **argv)
 	return 0;
 }
 
-static int
-jffs2_mark(int argc, char **argv)
+static int jffs2_mark(struct volume *v)
 {
 	__u32 deadc0de = __cpu_to_be32(0xdeadc0de);
-	struct volume *v;
 	size_t sz;
 	int fd;
-
-	if (ask_user(argc, argv))
-		return -1;
-
-	v = volume_find("rootfs_data");
-	if (!v) {
-		ULOG_ERR("MTD partition 'rootfs_data' not found\n");
-		return -1;
-	}
 
 	fd = open(v->blk, O_WRONLY);
 	ULOG_INFO("%s - marking with deadc0de\n", v->blk);
@@ -110,7 +83,28 @@ jffs2_mark(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
+	struct volume *v;
+
+	if (ask_user(argc, argv))
+		return -1;
+
+	/*
+	 * TODO: Currently this only checks if kernel supports OverlayFS. We
+	 * should check if there is a mount point using it with rootfs_data
+	 * as upperdir.
+	 */
+	if (find_filesystem("overlay")) {
+		ULOG_ERR("overlayfs not supported by kernel\n");
+		return -1;
+	}
+
+	v = volume_find("rootfs_data");
+	if (!v) {
+		ULOG_ERR("MTD partition 'rootfs_data' not found\n");
+		return -1;
+	}
+
 	if (!strcmp(*argv, "jffs2mark"))
-		return jffs2_mark(argc, argv);
-	return jffs2_reset(argc, argv);
+		return jffs2_mark(v);
+	return jffs2_reset(v);
 }
