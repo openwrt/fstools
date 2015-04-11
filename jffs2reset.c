@@ -27,6 +27,8 @@
 #include "libfstools/libfstools.h"
 #include "libfstools/volume.h"
 
+static int jffs2_mark(struct volume *v);
+
 static int
 ask_user(int argc, char **argv)
 {
@@ -50,8 +52,8 @@ static int jffs2_reset(struct volume *v)
 		overlay_delete(mp, false);
 		mount(mp, "/", NULL, MS_REMOUNT, 0);
 	} else {
-		ULOG_INFO("%s is not mounted, erasing it\n", v->blk);
-		volume_erase_all(v);
+		ULOG_INFO("%s is not mounted\n", v->blk);
+		return jffs2_mark(v);
 	}
 
 	return 0;
@@ -64,7 +66,7 @@ static int jffs2_mark(struct volume *v)
 	int fd;
 
 	fd = open(v->blk, O_WRONLY);
-	ULOG_INFO("%s - marking with deadc0de\n", v->blk);
+	ULOG_INFO("%s will be erased on next mount\n", v->blk);
 	if (!fd) {
 		ULOG_ERR("opening %s failed\n", v->blk);
 		return -1;
