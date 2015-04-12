@@ -274,6 +274,13 @@ static int mount_add(struct uci_section *s)
 	if (m->target && !strcmp(m->target, "/overlay"))
 		m->extroot = m->overlay = 1;
 
+	if (m->target && *m->target != '/') {
+		ULOG_WARN("ignoring mount section %s due to invalid target '%s'\n",
+		          s->e.name, m->target);
+		free(m);
+		return -1;
+	}
+
 	if (m->uuid)
 		vlist_add(&mounts, &m->node, m->uuid);
 	else if (m->label)
