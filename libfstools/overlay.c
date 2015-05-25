@@ -14,7 +14,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/mount.h>
-#include <sys/syscall.h>
 
 #include <asm/byteorder.h>
 
@@ -34,18 +33,6 @@
 #define SWITCH_JFFS2 "/tmp/.switch_jffs2"
 
 static bool keep_sysupgrade;
-
-static ssize_t
-fs_getxattr(const char *path, const char *name, void *value, size_t size)
-{
-	return syscall(__NR_getxattr, path, name, value, size);
-}
-
-static ssize_t
-fs_setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
-{
-	return syscall(__NR_setxattr, path, name, value, size, flags);
-}
 
 static int
 handle_rmdir(const char *dir)
@@ -290,10 +277,19 @@ static int overlay_mount_fs(struct volume *v)
 
 enum fs_state fs_state_get(const char *dir)
 {
+	char *path;
+	char valstr[16];
 	uint32_t val;
+	ssize_t len;
 
-	if (fs_getxattr(dir, "user.fs_state", &val, sizeof(val)) != sizeof(val))
+	path = alloca(strlen(dir) + 1 + sizeof("/.fs_state"));
+	sprintf(path, "%s/.fs_state", dir);
+	len = readlink(path, valstr, sizeof(valstr) - 1);
+	if (len < 0)
 		return FS_STATE_UNKNOWN;
+
+	valstr[len] = 0;
+	val = atoi(valstr);
 
 	if (val > __FS_STATE_LAST)
 		return FS_STATE_UNKNOWN;
@@ -304,9 +300,15 @@ enum fs_state fs_state_get(const char *dir)
 
 int fs_state_set(const char *dir, enum fs_state state)
 {
-	uint32_t val = state;
+	char valstr[16];
+	char *path;
 
-	return fs_setxattr(dir, "user.fs_state", &val, sizeof(val), 0);
+	path = alloca(strlen(dir) + 1 + sizeof("/.fs_state"));
+	sprintf(path, "%s/.fs_state", dir);
+	unlink(path);
+	snprintf(valstr, sizeof(valstr), "%d", state);
+
+	return symlink(valstr, path);
 }
 
 
