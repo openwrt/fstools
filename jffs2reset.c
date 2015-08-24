@@ -14,7 +14,7 @@
 #include <sys/mount.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-
+#include <sys/reboot.h>
 #include <libubox/ulog.h>
 
 #include <fcntl.h>
@@ -23,6 +23,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <getopt.h>
+
 
 #include "libfstools/libfstools.h"
 #include "libfstools/volume.h"
@@ -30,18 +32,15 @@
 static int jffs2_mark(struct volume *v);
 
 static int
-ask_user(int argc, char **argv)
+ask_user(void)
 {
-	if ((argc < 2) || strcmp(argv[1], "-y")) {
-		ULOG_WARN("This will erase all settings and remove any installed packages. Are you sure? [N/y]\n");
-		if (getchar() != 'y')
-			return -1;
-	}
+	ULOG_WARN("This will erase all settings and remove any installed packages. Are you sure? [N/y]\n");
+	if (getchar() != 'y')
+		return -1;
 	return 0;
-
 }
 
-static int jffs2_reset(struct volume *v)
+static int jffs2_reset(struct volume *v, int reset)
 {
 	char *mp;
 
@@ -54,6 +53,14 @@ static int jffs2_reset(struct volume *v)
 	} else {
 		ULOG_INFO("%s is not mounted\n", v->blk);
 		return jffs2_mark(v);
+	}
+
+	if (reset) {
+		sync();
+		sleep(2);
+		reboot(RB_AUTOBOOT);
+		while (1)
+			;
 	}
 
 	return 0;
@@ -86,8 +93,20 @@ static int jffs2_mark(struct volume *v)
 int main(int argc, char **argv)
 {
 	struct volume *v;
+	int ch, yes = 0, reset = 0;
+	while ((ch = getopt(argc, argv, "yr")) != -1) {
+		switch(ch) {
+		case 'y':
+			yes = 1;
+			break;
+		case 'r':
+			reset = 1;
+			break;
+		}
 
-	if (ask_user(argc, argv))
+	}
+
+	if (!yes && ask_user())
 		return -1;
 
 	/*
@@ -108,5 +127,5 @@ int main(int argc, char **argv)
 
 	if (!strcmp(*argv, "jffs2mark"))
 		return jffs2_mark(v);
-	return jffs2_reset(v);
+	return jffs2_reset(v, reset);
 }
