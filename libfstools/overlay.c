@@ -67,6 +67,7 @@ handle_rmdir(const char *dir)
 void
 foreachdir(const char *dir, int (*cb)(const char*))
 {
+	struct stat s = { 0 };
 	char globdir[256];
 	glob_t gl;
 	int j;
@@ -78,7 +79,8 @@ foreachdir(const char *dir, int (*cb)(const char*))
 
 	if (!glob(globdir, GLOB_NOESCAPE | GLOB_MARK | GLOB_ONLYDIR, NULL, &gl))
 		for (j = 0; j < gl.gl_pathc; j++)
-			foreachdir(gl.gl_pathv[j], cb);
+			if (!stat(gl.gl_pathv[j], &s) && !S_ISLNK(s.st_mode))
+				foreachdir(gl.gl_pathv[j], cb);
 
 	cb(dir);
 }
