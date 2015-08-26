@@ -78,10 +78,16 @@ foreachdir(const char *dir, int (*cb)(const char*))
 		snprintf(globdir, 256, "%s/*", dir); /**/
 
 	if (!glob(globdir, GLOB_NOESCAPE | GLOB_MARK | GLOB_ONLYDIR, NULL, &gl))
-		for (j = 0; j < gl.gl_pathc; j++)
-			if (!stat(gl.gl_pathv[j], &s) && !S_ISLNK(s.st_mode))
-				foreachdir(gl.gl_pathv[j], cb);
+		for (j = 0; j < gl.gl_pathc; j++) {
+			char *dir = gl.gl_pathv[j];
+			int len = strlen(gl.gl_pathv[j]);
 
+			if (len > 1 && dir[len - 1] == '/')
+				dir[len - 1] = '\0';
+
+			if (!lstat(gl.gl_pathv[j], &s) && !S_ISLNK(s.st_mode))
+				foreachdir(gl.gl_pathv[j], cb);
+	}
 	cb(dir);
 }
 
