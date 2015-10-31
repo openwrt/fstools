@@ -17,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307  USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
 #ifndef _BLKID_BLKID_H
@@ -26,14 +26,12 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include "libblkid-tiny.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define BLKID_VERSION   "2.21.0"
-#define BLKID_DATE      "25-May-2012"
+#define BLKID_VERSION   "2.27.0"
+#define BLKID_DATE      "07-Sep-2015"
 
 /**
  * blkid_dev:
@@ -122,13 +120,32 @@ typedef struct blkid_struct_dev_iterate *blkid_dev_iterate;
 #define BLKID_DEV_VERIFY	0x0002
 #define BLKID_DEV_NORMAL	(BLKID_DEV_CREATE | BLKID_DEV_VERIFY)
 
+
+#ifndef __GNUC_PREREQ
+# if defined __GNUC__ && defined __GNUC_MINOR__
+#  define __GNUC_PREREQ(maj, min)  ((__GNUC__ << 16) + __GNUC_MINOR__ >= ((maj) << 16) + (min))
+# else
+#  define __GNUC_PREREQ(maj, min) 0
+# endif
+#endif
+
+#ifndef __ul_attribute__
+# if __GNUC_PREREQ (3, 4)
+#  define __ul_attribute__(_a_) __attribute__(_a_)
+# else
+#  define __ul_attribute__(_a_)
+# endif
+#endif
+
 /* cache.c */
+extern void blkid_init_debug(int mask);
 extern void blkid_put_cache(blkid_cache cache);
 extern int blkid_get_cache(blkid_cache *cache, const char *filename);
 extern void blkid_gc_cache(blkid_cache cache);
 
 /* dev.c */
-extern const char *blkid_dev_devname(blkid_dev dev);
+extern const char *blkid_dev_devname(blkid_dev dev)
+			__ul_attribute__((warn_unused_result));
 
 extern blkid_dev_iterate blkid_dev_iterate_begin(blkid_cache cache);
 extern int blkid_dev_set_search(blkid_dev_iterate iter,
@@ -137,16 +154,18 @@ extern int blkid_dev_next(blkid_dev_iterate iterate, blkid_dev *dev);
 extern void blkid_dev_iterate_end(blkid_dev_iterate iterate);
 
 /* devno.c */
-extern char *blkid_devno_to_devname(dev_t devno);
+extern char *blkid_devno_to_devname(dev_t devno)
+			__ul_attribute__((warn_unused_result));
 extern int blkid_devno_to_wholedisk(dev_t dev, char *diskname,
-                        size_t len, dev_t *diskdevno);
+                        size_t len, dev_t *diskdevno)
+			__ul_attribute__((warn_unused_result));
 
 /* devname.c */
 extern int blkid_probe_all(blkid_cache cache);
 extern int blkid_probe_all_new(blkid_cache cache);
 extern int blkid_probe_all_removable(blkid_cache cache);
-extern blkid_dev blkid_get_dev(blkid_cache cache, const char *devname,
-			       int flags);
+
+extern blkid_dev blkid_get_dev(blkid_cache cache, const char *devname, int flags);
 
 /* getsize.c */
 extern blkid_loff_t blkid_get_dev_size(int fd);
@@ -158,25 +177,28 @@ extern blkid_dev blkid_verify(blkid_cache cache, blkid_dev dev);
 
 /* resolve.c */
 extern char *blkid_get_tag_value(blkid_cache cache, const char *tagname,
-				       const char *devname);
+				       const char *devname)
+			__ul_attribute__((warn_unused_result));
 extern char *blkid_get_devname(blkid_cache cache, const char *token,
-			       const char *value);
+			       const char *value)
+			__ul_attribute__((warn_unused_result));
 
 /* tag.c */
 extern blkid_tag_iterate blkid_tag_iterate_begin(blkid_dev dev);
 extern int blkid_tag_next(blkid_tag_iterate iterate,
 			      const char **type, const char **value);
 extern void blkid_tag_iterate_end(blkid_tag_iterate iterate);
-extern int blkid_dev_has_tag(blkid_dev dev, const char *type,
-			     const char *value);
+extern int blkid_dev_has_tag(blkid_dev dev, const char *type, const char *value);
+
 extern blkid_dev blkid_find_dev_with_tag(blkid_cache cache,
 					 const char *type,
 					 const char *value);
-extern int blkid_parse_tag_string(const char *token, char **ret_type,
-				  char **ret_val);
+
+extern int blkid_parse_tag_string(const char *token, char **ret_type, char **ret_val);
 
 /* version.c */
-extern int blkid_parse_version_string(const char *ver_string);
+extern int blkid_parse_version_string(const char *ver_string)
+			__ul_attribute__((nonnull));
 extern int blkid_get_library_version(const char **ver_string,
 				     const char **date_string);
 
@@ -187,21 +209,31 @@ extern int blkid_safe_string(const char *str, char *str_safe, size_t len);
 /* evaluate.c */
 extern int blkid_send_uevent(const char *devname, const char *action);
 extern char *blkid_evaluate_tag(const char *token, const char *value,
-				blkid_cache *cache);
-extern char *blkid_evaluate_spec(const char *spec, blkid_cache *cache);
+				blkid_cache *cache)
+			__ul_attribute__((warn_unused_result));
+extern char *blkid_evaluate_spec(const char *spec, blkid_cache *cache)
+			__ul_attribute__((warn_unused_result));
 
 /* probe.c */
-extern blkid_probe blkid_new_probe(void);
-extern blkid_probe blkid_new_probe_from_filename(const char *filename);
+extern blkid_probe blkid_new_probe(void)
+			__ul_attribute__((warn_unused_result));
+extern blkid_probe blkid_new_probe_from_filename(const char *filename)
+			__ul_attribute__((warn_unused_result));
 extern void blkid_free_probe(blkid_probe pr);
+
 extern void blkid_reset_probe(blkid_probe pr);
 
 extern int blkid_probe_set_device(blkid_probe pr, int fd,
 	                blkid_loff_t off, blkid_loff_t size);
 
-extern dev_t blkid_probe_get_devno(blkid_probe pr);
-extern dev_t blkid_probe_get_wholedisk_devno(blkid_probe pr);
-extern int blkid_probe_is_wholedisk(blkid_probe pr);
+extern dev_t blkid_probe_get_devno(blkid_probe pr)
+			__ul_attribute__((nonnull));
+
+extern dev_t blkid_probe_get_wholedisk_devno(blkid_probe pr)
+			__ul_attribute__((nonnull));
+
+extern int blkid_probe_is_wholedisk(blkid_probe pr)
+			__ul_attribute__((nonnull));
 
 extern blkid_loff_t blkid_probe_get_size(blkid_probe pr);
 extern blkid_loff_t blkid_probe_get_offset(blkid_probe pr);
@@ -214,6 +246,7 @@ extern int blkid_probe_get_fd(blkid_probe pr);
  * superblocks probing
  */
 extern int blkid_known_fstype(const char *fstype);
+
 extern int blkid_superblocks_get_name(size_t idx, const char **name, int *usage);
 
 extern int blkid_probe_enable_superblocks(blkid_probe pr, int enable);
@@ -227,12 +260,12 @@ extern int blkid_probe_enable_superblocks(blkid_probe pr, int enable);
 #define BLKID_SUBLKS_USAGE	(1 << 7) /* define USAGE result value */
 #define BLKID_SUBLKS_VERSION	(1 << 8) /* read FS type from superblock */
 #define BLKID_SUBLKS_MAGIC	(1 << 9) /* define SBMAGIC and SBMAGIC_OFFSET */
+#define BLKID_SUBLKS_BADCSUM	(1 << 10) /* allow a bad checksum */
 
 #define BLKID_SUBLKS_DEFAULT	(BLKID_SUBLKS_LABEL | BLKID_SUBLKS_UUID | \
 				 BLKID_SUBLKS_TYPE | BLKID_SUBLKS_SECTYPE)
 
 extern int blkid_probe_set_superblocks_flags(blkid_probe pr, int flags);
-
 extern int blkid_probe_reset_superblocks_filter(blkid_probe pr);
 extern int blkid_probe_invert_superblocks_filter(blkid_probe pr);
 
@@ -260,22 +293,27 @@ extern int blkid_probe_enable_topology(blkid_probe pr, int enable);
 /* binary interface */
 extern blkid_topology blkid_probe_get_topology(blkid_probe pr);
 
-extern unsigned long blkid_topology_get_alignment_offset(blkid_topology tp);
-extern unsigned long blkid_topology_get_minimum_io_size(blkid_topology tp);
-extern unsigned long blkid_topology_get_optimal_io_size(blkid_topology tp);
-extern unsigned long blkid_topology_get_logical_sector_size(blkid_topology tp);
-extern unsigned long blkid_topology_get_physical_sector_size(blkid_topology tp);
+extern unsigned long blkid_topology_get_alignment_offset(blkid_topology tp)
+			__ul_attribute__((nonnull));
+extern unsigned long blkid_topology_get_minimum_io_size(blkid_topology tp)
+			__ul_attribute__((nonnull));
+extern unsigned long blkid_topology_get_optimal_io_size(blkid_topology tp)
+			__ul_attribute__((nonnull));
+extern unsigned long blkid_topology_get_logical_sector_size(blkid_topology tp)
+			__ul_attribute__((nonnull));
+extern unsigned long blkid_topology_get_physical_sector_size(blkid_topology tp)
+			__ul_attribute__((nonnull));
 
 /*
  * partitions probing
  */
 extern int blkid_known_pttype(const char *pttype);
+
 extern int blkid_probe_enable_partitions(blkid_probe pr, int enable);
 
 extern int blkid_probe_reset_partitions_filter(blkid_probe pr);
 extern int blkid_probe_invert_partitions_filter(blkid_probe pr);
 extern int blkid_probe_filter_partitions_type(blkid_probe pr, int flag, char *names[]);
-
 
 /* partitions probing flags */
 #define BLKID_PARTS_FORCE_GPT		(1 << 1)
@@ -289,22 +327,34 @@ extern blkid_partlist blkid_probe_get_partitions(blkid_probe pr);
 extern int blkid_partlist_numof_partitions(blkid_partlist ls);
 extern blkid_parttable blkid_partlist_get_table(blkid_partlist ls);
 extern blkid_partition blkid_partlist_get_partition(blkid_partlist ls, int n);
+extern blkid_partition blkid_partlist_get_partition_by_partno(blkid_partlist ls, int n);
 extern blkid_partition blkid_partlist_devno_to_partition(blkid_partlist ls, dev_t devno);
-
 extern blkid_parttable blkid_partition_get_table(blkid_partition par);
+
 extern const char *blkid_partition_get_name(blkid_partition par);
 extern const char *blkid_partition_get_uuid(blkid_partition par);
 extern int blkid_partition_get_partno(blkid_partition par);
 extern blkid_loff_t blkid_partition_get_start(blkid_partition par);
 extern blkid_loff_t blkid_partition_get_size(blkid_partition par);
-extern int blkid_partition_get_type(blkid_partition par);
+
+extern int blkid_partition_get_type(blkid_partition par)
+			__ul_attribute__((nonnull));
+
 extern const char *blkid_partition_get_type_string(blkid_partition par);
-extern unsigned long long blkid_partition_get_flags(blkid_partition par);
-extern int blkid_partition_is_logical(blkid_partition par);
-extern int blkid_partition_is_extended(blkid_partition par);
-extern int blkid_partition_is_primary(blkid_partition par);
+
+extern unsigned long long blkid_partition_get_flags(blkid_partition par)
+			__ul_attribute__((nonnull));
+
+extern int blkid_partition_is_logical(blkid_partition par)
+			__ul_attribute__((nonnull));
+extern int blkid_partition_is_extended(blkid_partition par)
+			__ul_attribute__((nonnull));
+extern int blkid_partition_is_primary(blkid_partition par)
+			__ul_attribute__((nonnull));
 
 extern const char *blkid_parttable_get_type(blkid_parttable tab);
+extern const char *blkid_parttable_get_id(blkid_parttable tab);
+
 extern blkid_loff_t blkid_parttable_get_offset(blkid_parttable tab);
 extern blkid_partition blkid_parttable_get_parent(blkid_parttable tab);
 
@@ -320,9 +370,11 @@ extern int blkid_probe_get_value(blkid_probe pr, int num, const char **name,
                         const char **data, size_t *len);
 extern int blkid_probe_lookup_value(blkid_probe pr, const char *name,
                         const char **data, size_t *len);
-extern int blkid_probe_has_value(blkid_probe pr, const char *name);
+extern int blkid_probe_has_value(blkid_probe pr, const char *name)
+			__ul_attribute__((nonnull));
 
 extern int blkid_do_wipe(blkid_probe pr, int dryrun);
+extern int blkid_probe_step_back(blkid_probe pr);
 
 /*
  * Deprecated functions/macros
@@ -338,11 +390,20 @@ extern int blkid_do_wipe(blkid_probe pr, int dryrun);
 #define BLKID_PROBREQ_USAGE     BLKID_SUBLKS_USAGE
 #define BLKID_PROBREQ_VERSION   BLKID_SUBLKS_VERSION
 
-extern int blkid_probe_set_request(blkid_probe pr, int flags);
-extern int blkid_probe_filter_usage(blkid_probe pr, int flag, int usage);
-extern int blkid_probe_filter_types(blkid_probe pr, int flag, char *names[]);
-extern int blkid_probe_invert_filter(blkid_probe pr);
-extern int blkid_probe_reset_filter(blkid_probe pr);
+extern int blkid_probe_set_request(blkid_probe pr, int flags)
+			__ul_attribute__((deprecated));
+
+extern int blkid_probe_filter_usage(blkid_probe pr, int flag, int usage)
+			__ul_attribute__((deprecated));
+
+extern int blkid_probe_filter_types(blkid_probe pr, int flag, char *names[])
+			__ul_attribute__((deprecated));
+
+extern int blkid_probe_invert_filter(blkid_probe pr)
+			__ul_attribute__((deprecated));
+
+extern int blkid_probe_reset_filter(blkid_probe pr)
+			__ul_attribute__((deprecated));
 
 #endif /* BLKID_DISABLE_DEPRECATED */
 

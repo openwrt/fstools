@@ -90,3 +90,4 @@ const struct blkid_idinfo btrfs_idinfo =
 	  { NULL }
 	}
 };
+

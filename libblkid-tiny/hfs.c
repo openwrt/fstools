@@ -12,7 +12,10 @@
 #include <inttypes.h>
 
 #include "superblocks.h"
-//#include "md5.h"
+
+#if 0
+#include "md5.h"
+#endif
 
 /* HFS / HFS+ */
 struct hfs_finder_info {
@@ -130,7 +133,8 @@ struct hfsplus_vol_header {
 
 static int hfs_set_uuid(blkid_probe pr, unsigned char const *hfs_info, size_t len)
 {
-/*	static unsigned char const hash_init[MD5LENGTH] = {
+#if 0
+	static unsigned char const hash_init[MD5LENGTH] = {
 		0xb3, 0xe2, 0x0f, 0x39, 0xf2, 0x92, 0x11, 0xd6,
 		0x97, 0xa4, 0x00, 0x30, 0x65, 0x43, 0xec, 0xac
 	};
@@ -145,8 +149,10 @@ static int hfs_set_uuid(blkid_probe pr, unsigned char const *hfs_info, size_t le
 	MD5Final(uuid, &md5c);
 	uuid[6] = 0x30 | (uuid[6] & 0x0f);
 	uuid[8] = 0x80 | (uuid[8] & 0x3f);
-	return blkid_probe_set_uuid(pr, uuid);*/
-	return -1;
+	return blkid_probe_set_uuid(pr, uuid);
+#else
+	return -ENOSYS;
+#endif
 }
 
 static int probe_hfs(blkid_probe pr, const struct blkid_idmag *mag)
@@ -155,7 +161,7 @@ static int probe_hfs(blkid_probe pr, const struct blkid_idmag *mag)
 
 	hfs = blkid_probe_get_sb(pr, mag, struct hfs_mdb);
 	if (!hfs)
-		return -1;
+		return errno ? -errno : 1;
 
 	if ((memcmp(hfs->embed_sig, "H+", 2) == 0) ||
 	    (memcmp(hfs->embed_sig, "HX", 2) == 0))
@@ -194,7 +200,7 @@ static int probe_hfsplus(blkid_probe pr, const struct blkid_idmag *mag)
 
 	sbd = blkid_probe_get_sb(pr, mag, struct hfs_mdb);
 	if (!sbd)
-		return -1;
+		return errno ? -errno : 1;
 
 	/* Check for a HFS+ volume embedded in a HFS volume */
 	if (memcmp(sbd->signature, "BD", 2) == 0) {
@@ -219,7 +225,7 @@ static int probe_hfsplus(blkid_probe pr, const struct blkid_idmag *mag)
 				struct hfsplus_vol_header);
 
 	if (!hfsplus)
-		return -1;
+		return errno ? -errno : 1;
 
 	if ((memcmp(hfsplus->signature, "H+", 2) != 0) &&
 	    (memcmp(hfsplus->signature, "HX", 2) != 0))
@@ -229,7 +235,7 @@ static int probe_hfsplus(blkid_probe pr, const struct blkid_idmag *mag)
 
 	blocksize = be32_to_cpu(hfsplus->blocksize);
 	if (blocksize < HFSPLUS_SECTOR_SIZE)
-		return -1;
+		return 1;
 
 	memcpy(extents, hfsplus->cat_file.extents, sizeof(extents));
 	cat_block = be32_to_cpu(extents[0].start_block);
@@ -237,7 +243,7 @@ static int probe_hfsplus(blkid_probe pr, const struct blkid_idmag *mag)
 	buf = blkid_probe_get_buffer(pr,
 			off + ((blkid_loff_t) cat_block * blocksize), 0x2000);
 	if (!buf)
-		return 0;
+		return errno ? -errno : 0;
 
 	bnode = (struct hfsplus_bheader_record *)
 		&buf[sizeof(struct hfsplus_bnode_descriptor)];
@@ -266,13 +272,13 @@ static int probe_hfsplus(blkid_probe pr, const struct blkid_idmag *mag)
 	if (ext == HFSPLUS_EXTENT_COUNT)
 		return 0;
 
-	leaf_off = (ext_block_start + leaf_block) * blocksize;
+	leaf_off = ((uint64_t) ext_block_start + leaf_block) * blocksize;
 
 	buf = blkid_probe_get_buffer(pr,
 				(blkid_loff_t) off + leaf_off,
 				leaf_node_size);
 	if (!buf)
-		return 0;
+		return errno ? -errno : 0;
 
 	descr = (struct hfsplus_bnode_descriptor *) buf;
 	record_count = be16_to_cpu(descr->num_recs);
@@ -287,6 +293,12 @@ static int probe_hfsplus(blkid_probe pr, const struct blkid_idmag *mag)
 
 	if (be32_to_cpu(key->parent_id) != HFSPLUS_POR_CNID)
 		return 0;
+
+#if 0
+	blkid_probe_set_utf8label(pr, key->unicode,
+			be16_to_cpu(key->unicode_len) * 2,
+			BLKID_ENC_UTF16BE);
+#endif
 
 	return 0;
 }

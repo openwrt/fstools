@@ -11,25 +11,42 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  */
+#ifndef _LIBBLKID_TINY_H
+#define _LIBBLKID_TINY_H
 
 #include <libubox/list.h>
 
-struct blkid_idmag;
-struct blkid_idmag;
-struct blkid_idinfo;
+struct blkid_struct_probe;
 
+/*
+ * Filesystem / Raid magic strings
+ */
 struct blkid_idmag
 {
-	const char	*magic;
-	unsigned int	len;
+	const char	*magic;		/* magic string */
+	unsigned int	len;		/* length of magic */
 
-	long		kboff;
-	unsigned int	sboff;
+	long		kboff;		/* kilobyte offset of superblock */
+	unsigned int	sboff;		/* byte offset within superblock */
 };
 
+/*
+ * Filesystem / Raid description
+ */
+struct blkid_idinfo
+{
+	const char	*name;		/* fs, raid or partition table name */
+	int		usage;		/* BLKID_USAGE_* flag */
+	int		flags;		/* BLKID_IDINFO_* flags */
+	int		minsz;		/* minimal device size */
 
-struct blkid_idinfo;
+					/* probe function */
+	int		(*probefunc)(struct blkid_struct_probe *pr, const struct blkid_idmag *mag);
 
+	struct blkid_idmag	magics[];	/* NULL or array with magic strings */
+};
+
+/* Smaller version of the struct provided in blkidP.h */
 struct blkid_struct_probe
 {
 	const struct blkid_idinfo	*id;
@@ -44,15 +61,7 @@ struct blkid_struct_probe
 	char	version[64];
 };
 
-struct blkid_idinfo
-{
-	const char	*name;
-	int		usage;
-	int		flags;
-	int		minsz;
-	int (*probefunc)(struct blkid_struct_probe *pr, const struct blkid_idmag *mag);
-	struct blkid_idmag	magics[];
-};
-
 extern int probe_block(char *block, struct blkid_struct_probe *pr);
 extern int mkblkdev(void);
+
+#endif /* _LIBBLKID_TINY_H */

@@ -16,6 +16,10 @@
 #include <ctype.h>
 #include <stdint.h>
 
+#if 0
+#include "pt-mbr.h"
+#endif
+
 #include "superblocks.h"
 
 /* Yucky misaligned values */
@@ -123,9 +127,8 @@ static unsigned char *search_fat_label(blkid_probe pr,
 	struct vfat_dir_entry *ent, *dir = NULL;
 	uint32_t i;
 
-	DBG(DEBUG_LOWPROBE,
-		printf("\tlook for label in root-dir "
-			"(entries: %d, offset: %jd)\n", entries, offset));
+	DBG(LOWPROBE, ul_debug("\tlook for label in root-dir "
+			"(entries: %d, offset: %jd)", entries, offset));
 
 	if (!blkid_probe_is_tiny(pr)) {
 		/* large disk, read whole root directory */
@@ -163,15 +166,15 @@ static unsigned char *search_fat_label(blkid_probe pr,
 
 		if ((ent->attr & (FAT_ATTR_VOLUME_ID | FAT_ATTR_DIR)) ==
 		    FAT_ATTR_VOLUME_ID) {
-			DBG(DEBUG_LOWPROBE,
-				printf("\tfound fs LABEL at entry %d\n", i));
+			DBG(LOWPROBE, ul_debug("\tfound fs LABEL at entry %d", i));
 			return ent->name;
 		}
 	}
 	return NULL;
 }
 
-static int fat_valid_superblock(const struct blkid_idmag *mag,
+static int fat_valid_superblock(blkid_probe pr,
+			const struct blkid_idmag *mag,
 			struct msdos_super_block *ms,
 			struct vfat_super_block *vs,
 			uint32_t *cluster_count, uint32_t *fat_size)
@@ -245,77 +248,84 @@ static int fat_valid_superblock(const struct blkid_idmag *mag,
 	if (cluster_count)
 		*cluster_count = __cluster_count;
 
+#if 0
+	if (blkid_probe_is_wholedisk(pr)) {
+		/* OK, seems like FAT, but it's possible that we found boot
+		 * sector with crazy FAT-like stuff (magic strings, media,
+		 * etc..) before MBR. Let's make sure that there is no MBR with
+		 * usable partition. */
+		unsigned char *buf = (unsigned char *) ms;
+		if (mbr_is_valid_magic(buf)) {
+			struct dos_partition *p0 = mbr_get_partition(buf, 0);
+			if (dos_partition_get_size(p0) != 0 &&
+			    (p0->boot_ind == 0 || p0->boot_ind == 0x80))
+				return 0;
+		}
+	}
+#endif
+
 	return 1;	/* valid */
 }
 
+#if 0
 /*
  * This function is used by MBR partition table parser to avoid
  * misinterpretation of FAT filesystem.
  */
-/*static int blkid_probe_is_vfat(blkid_probe pr)
+int blkid_probe_is_vfat(blkid_probe pr)
 {
 	struct vfat_super_block *vs;
 	struct msdos_super_block *ms;
 	const struct blkid_idmag *mag = NULL;
+	int rc;
 
-	if (blkid_probe_get_idmag(pr, &vfat_idinfo, NULL, &mag) || !mag)
+	rc = blkid_probe_get_idmag(pr, &vfat_idinfo, NULL, &mag);
+	if (rc < 0)
+		return rc;	/* error */
+	if (rc != BLKID_PROBE_OK || !mag)
 		return 0;
 
 	ms = blkid_probe_get_sb(pr, mag, struct msdos_super_block);
 	if (!ms)
-		return 0;
+		return errno ? -errno : 0;
 	vs = blkid_probe_get_sb(pr, mag, struct vfat_super_block);
 	if (!vs)
-		return 0;
+		return errno ? -errno : 0;
 
-	return fat_valid_superblock(mag, ms, vs, NULL, NULL);
-}*/
-static struct vfat_super_block vs;
-static struct msdos_super_block ms;
-
-static int set_label(blkid_probe pr, unsigned char *vol_label)
-{
-	unsigned char *c;
-
-	for (c = vol_label + 10; c >= vol_label && *c == ' '; c--)
-		*c = 0;
-
-	if (!*vol_label)
-		return 0;
-
-	return blkid_probe_set_label(pr, vol_label, 11);
+	return fat_valid_superblock(pr, mag, ms, vs, NULL, NULL);
 }
+#endif
 
 /* FAT label extraction from the root directory taken from Kay
  * Sievers's volume_id library */
 static int probe_vfat(blkid_probe pr, const struct blkid_idmag *mag)
 {
-	struct vfat_super_block *_vs;
-	struct msdos_super_block *_ms;
+	struct vfat_super_block *vs;
+	struct msdos_super_block *ms;
 	const unsigned char *vol_label = 0;
 	unsigned char *vol_serno = NULL, vol_label_buf[11];
 	uint16_t sector_size = 0, reserved;
 	uint32_t cluster_count, fat_size;
 	const char *version = NULL;
 
-	_ms = blkid_probe_get_sb(pr, mag, struct msdos_super_block);
-	if (!_ms)
-		return 0;
-	_vs = blkid_probe_get_sb(pr, mag, struct vfat_super_block);
-	if (!_vs)
-		return 0;
-	memcpy(&ms, _ms, sizeof(struct vfat_super_block));
-	memcpy(&vs, _vs, sizeof(struct msdos_super_block));
-	if (!fat_valid_superblock(mag, &ms, &vs, &cluster_count, &fat_size))
+	ms = blkid_probe_get_sb(pr, mag, struct msdos_super_block);
+	if (!ms)
+		return errno ? -errno : 1;
+
+	vs = blkid_probe_get_sb(pr, mag, struct vfat_super_block);
+	if (!vs)
+		return errno ? -errno : 1;
+
+	if (!fat_valid_superblock(pr, mag, ms, vs, &cluster_count, &fat_size))
 		return 1;
 
-	sector_size = unaligned_le16(&ms.ms_sector_size);
-	reserved =  le16_to_cpu(ms.ms_reserved);
+	sector_size = unaligned_le16(&ms->ms_sector_size);
+	reserved =  le16_to_cpu(ms->ms_reserved);
 
-	if (ms.ms_fat_length) {
+	if (ms->ms_fat_length) {
 		/* the label may be an attribute in the root directory */
 		uint32_t root_start = (reserved + fat_size) * sector_size;
-		uint32_t root_dir_entries = unaligned_le16(&vs.vs_dir_entries);
+		uint32_t root_dir_entries = unaligned_le16(&vs->vs_dir_entries);
 
 		vol_label = search_fat_label(pr, root_start, root_dir_entries);
 		if (vol_label) {
@@ -324,8 +334,8 @@ static int probe_vfat(blkid_probe pr, const struct blkid_idmag *mag)
 		}
 
 		if (!vol_label || !memcmp(vol_label, no_name, 11))
-			vol_label = ms.ms_label;
-		vol_serno = ms.ms_serno;
+			vol_label = ms->ms_label;
+		vol_serno = ms->ms_serno;
 
 		blkid_probe_set_value(pr, "SEC_TYPE", (unsigned char *) "msdos",
                               sizeof("msdos"));
@@ -335,24 +345,24 @@ static int probe_vfat(blkid_probe pr, const struct blkid_idmag *mag)
 		else if (cluster_count < FAT16_MAX)
 			version = "FAT16";
 
-	} else if (vs.vs_fat32_length) {
+	} else if (vs->vs_fat32_length) {
 		unsigned char *buf;
 		uint16_t fsinfo_sect;
 		int maxloop = 100;
 
 		/* Search the FAT32 root dir for the label attribute */
-		uint32_t buf_size = vs.vs_cluster_size * sector_size;
+		uint32_t buf_size = vs->vs_cluster_size * sector_size;
 		uint32_t start_data_sect = reserved + fat_size;
-		uint32_t entries = le32_to_cpu(vs.vs_fat32_length) *
+		uint32_t entries = le32_to_cpu(vs->vs_fat32_length) *
 					sector_size / sizeof(uint32_t);
-		uint32_t next = le32_to_cpu(vs.vs_root_cluster);
+		uint32_t next = le32_to_cpu(vs->vs_root_cluster);
 
 		while (next && next < entries && --maxloop) {
 			uint32_t next_sect_off;
 			uint64_t next_off, fat_entry_off;
 			int count;
 
-			next_sect_off = (next - 2) * le32_to_cpu(vs.vs_cluster_size);
+			next_sect_off = (next - 2) * vs->vs_cluster_size;
 			next_off = (uint64_t)(start_data_sect + next_sect_off) *
 				sector_size;
 
@@ -379,15 +389,15 @@ static int probe_vfat(blkid_probe pr, const struct blkid_idmag *mag)
 		version = "FAT32";
 
 		if (!vol_label || !memcmp(vol_label, no_name, 11))
-			vol_label = NULL;
-		vol_serno = vs.vs_serno;
+			vol_label = vs->vs_label;
+		vol_serno = vs->vs_serno;
 
 		/*
 		 * FAT32 should have a valid signature in the fsinfo block,
 		 * but also allow all bytes set to '\0', because some volumes
 		 * do not set the signature at all.
 		 */
-		fsinfo_sect = le16_to_cpu(vs.vs_fsinfo_sector);
+		fsinfo_sect = le16_to_cpu(vs->vs_fsinfo_sector);
 		if (fsinfo_sect) {
 			struct fat32_fsinfo *fsinfo;
 
@@ -395,25 +405,25 @@ static int probe_vfat(blkid_probe pr, const struct blkid_idmag *mag)
 					(blkid_loff_t) fsinfo_sect * sector_size,
 					sizeof(struct fat32_fsinfo));
 			if (buf == NULL)
-				return -1;
+				return errno ? -errno : 1;
 
 			fsinfo = (struct fat32_fsinfo *) buf;
 			if (memcmp(fsinfo->signature1, "\x52\x52\x61\x41", 4) != 0 &&
 			    memcmp(fsinfo->signature1, "\x52\x52\x64\x41", 4) != 0 &&
 			    memcmp(fsinfo->signature1, "\x00\x00\x00\x00", 4) != 0)
-				return -1;
+				return 1;
 			if (memcmp(fsinfo->signature2, "\x72\x72\x41\x61", 4) != 0 &&
 			    memcmp(fsinfo->signature2, "\x00\x00\x00\x00", 4) != 0)
-				return -1;
+				return 1;
 		}
 	}
 
 	if (vol_label && memcmp(vol_label, no_name, 11))
-		set_label(pr, (unsigned char *) vol_label);
+		blkid_probe_set_label(pr, (unsigned char *) vol_label, 11);
 
 	/* We can't just print them as %04X, because they are unaligned */
 	if (vol_serno)
-		blkid_probe_sprintf_uuid(pr, vol_serno, 4, "%02x%02x-%02x%02x",
+		blkid_probe_sprintf_uuid(pr, vol_serno, 4, "%02X%02X-%02X%02X",
 			vol_serno[3], vol_serno[2], vol_serno[1], vol_serno[0]);
 	if (version)
 		blkid_probe_set_version(pr, version);

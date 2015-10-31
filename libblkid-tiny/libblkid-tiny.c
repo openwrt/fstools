@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <sys/utsname.h>
 
+#include "libblkid-tiny.h"
 #include "superblocks.h"
 #include "linux_version.h"
 

@@ -9,17 +9,20 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+
+#include <assert.h>
 
 #ifdef HAVE_ERR_H
 # include <err.h>
 #endif
 
 /*
- * Compiler specific stuff
+ * Compiler-specific stuff
  */
 #ifndef __GNUC_PREREQ
 # if defined __GNUC__ && defined __GNUC_MINOR__
@@ -36,7 +39,7 @@
 # define __must_be_array(a) \
 	UL_BUILD_BUG_ON_ZERO(__builtin_types_compatible_p(__typeof__(a), __typeof__(&a[0])))
 
-# define ignore_result(x) ({ \
+# define ignore_result(x) __extension__ ({ \
 	__typeof__(x) __dummy __attribute__((__unused__)) = (x); (void) __dummy; \
 })
 
@@ -51,7 +54,7 @@
  */
 #ifndef __ul_alloc_size
 # if __GNUC_PREREQ (4, 3)
-#  define __ul_alloc_size(s) __attribute__((alloc_size(s)))
+#  define __ul_alloc_size(s) __attribute__((alloc_size(s), warn_unused_result))
 # else
 #  define __ul_alloc_size(s)
 # endif
@@ -59,18 +62,19 @@
 
 #ifndef __ul_calloc_size
 # if __GNUC_PREREQ (4, 3)
-#  define __ul_calloc_size(n, s) __attribute__((alloc_size(n, s)))
+#  define __ul_calloc_size(n, s) __attribute__((alloc_size(n, s), warn_unused_result))
 # else
 #  define __ul_calloc_size(n, s)
 # endif
 #endif
 
-/* Force a compilation error if condition is true, but also produce a
+/*
+ * Force a compilation error if condition is true, but also produce a
  * result (of value 0 and type size_t), so the expression can be used
- * e.g. in a structure initializer (or where-ever else comma expressions
+ * e.g. in a structure initializer (or wherever else comma expressions
  * aren't permitted).
  */
-#define UL_BUILD_BUG_ON_ZERO(e) (sizeof(struct { int:-!!(e); }))
+#define UL_BUILD_BUG_ON_ZERO(e) __extension__ (sizeof(struct { int:-!!(e); }))
 #define BUILD_BUG_ON_NULL(e) ((void *)sizeof(struct { int:-!!(e); }))
 
 #ifndef ARRAY_SIZE
@@ -90,7 +94,7 @@
 #endif
 
 #ifndef min
-# define min(x, y) ({				\
+# define min(x, y) __extension__ ({		\
 	__typeof__(x) _min1 = (x);		\
 	__typeof__(y) _min2 = (y);		\
 	(void) (&_min1 == &_min2);		\
@@ -98,11 +102,19 @@
 #endif
 
 #ifndef max
-# define max(x, y) ({				\
+# define max(x, y) __extension__ ({		\
 	__typeof__(x) _max1 = (x);		\
 	__typeof__(y) _max2 = (y);		\
 	(void) (&_max1 == &_max2);		\
 	_max1 > _max2 ? _max1 : _max2; })
+#endif
+
+#ifndef cmp_numbers
+# define cmp_numbers(x, y) __extension__ ({	\
+	__typeof__(x) _a = (x);			\
+	__typeof__(y) _b = (y);			\
+	(void) (&_a == &_b);			\
+	_a == _b ? 0 : _a > _b ? 1 : -1; })
 #endif
 
 #ifndef offsetof
@@ -110,7 +122,7 @@
 #endif
 
 #ifndef container_of
-#define container_of(ptr, type, member) ({                       \
+#define container_of(ptr, type, member) __extension__ ({	 \
 	const __typeof__( ((type *)0)->member ) *__mptr = (ptr); \
 	(type *)( (char *)__mptr - offsetof(type,member) );})
 #endif
@@ -210,9 +222,23 @@ static inline int dirfd(DIR *d)
  * Fallback defines for old versions of glibc
  */
 #include <fcntl.h>
+
+#ifdef O_CLOEXEC
+#define UL_CLOEXECSTR	"e"
+#else
+#define UL_CLOEXECSTR	""
+#endif
+
 #ifndef O_CLOEXEC
 #define O_CLOEXEC 0
 #endif
+
+#ifdef __FreeBSD_kernel__
+#ifndef F_DUPFD_CLOEXEC
+#define F_DUPFD_CLOEXEC	17	/* Like F_DUPFD, but FD_CLOEXEC is set */
+#endif
+#endif
+
 
 #ifndef AI_ADDRCONFIG
 #define AI_ADDRCONFIG 0x0020
@@ -222,13 +248,55 @@ static inline int dirfd(DIR *d)
 #define IUTF8 0040000
 #endif
 
+#if 0
+/*
+ * MAXHOSTNAMELEN replacement
+ */
+static inline size_t get_hostname_max(void)
+{
+	long len = sysconf(_SC_HOST_NAME_MAX);
+
+	if (0 < len)
+		return len;
+
+#ifdef MAXHOSTNAMELEN
+	return MAXHOSTNAMELEN;
+#elif HOST_NAME_MAX
+	return HOST_NAME_MAX;
+#endif
+	return 64;
+}
+
+/*
+ * The usleep function was marked obsolete in POSIX.1-2001 and was removed
+ * in POSIX.1-2008.  It was replaced with nanosleep() that provides more
+ * advantages (like no interaction with signals and other timer functions).
+ */
+#include <time.h>
+
+static inline int xusleep(useconds_t usec)
+{
+#ifdef HAVE_NANOSLEEP
+	struct timespec waittime = {
+		.tv_sec   =  usec / 1000000L,
+		.tv_nsec  = (usec % 1000000L) * 1000
+	};
+	return nanosleep(&waittime, NULL);
+#elif defined(HAVE_USLEEP)
+	return usleep(usec);
+#else
+# error	"System with usleep() or nanosleep() required!"
+#endif
+}
+#endif
+
 /*
  * Constant strings for usage() functions. For more info see
- * Documentation/howto-usage-function.txt and sys-utils/arch.c
+ * Documentation/howto-usage-function.txt and disk-utils/delpart.c
  */
 #define USAGE_HEADER     _("\nUsage:\n")
 #define USAGE_OPTIONS    _("\nOptions:\n")
-#define USAGE_SEPARATOR  _("\n")
+#define USAGE_SEPARATOR    "\n"
 #define USAGE_HELP       _(" -h, --help     display this help and exit\n")
 #define USAGE_VERSION    _(" -V, --version  output version information and exit\n")
 #define USAGE_MAN_TAIL(_man)   _("\nFor more details see %s.\n"), _man
@@ -242,6 +310,42 @@ static inline int dirfd(DIR *d)
 #define UL_SCNsA	"%ms"
 #elif defined(HAVE_SCANF_AS_MODIFIER)
 #define UL_SCNsA	"%as"
+#endif
+
+/*
+ * seek stuff
+ */
+#ifndef SEEK_DATA
+# define SEEK_DATA	3
+#endif
+#ifndef SEEK_HOLE
+# define SEEK_HOLE	4
+#endif
+
+
+/*
+ * Macros to convert #define'itions to strings, for example
+ * #define XYXXY 42
+ * printf ("%s=%s\n", stringify(XYXXY), stringify_value(XYXXY));
+ */
+#define stringify_value(s) stringify(s)
+#define stringify(s) #s
+
+/*
+ * UL_ASAN_BLACKLIST is a macro to tell AddressSanitizer (a compile-time
+ * instrumentation shipped with Clang and GCC) to not instrument the
+ * annotated function.  Furthermore, it will prevent the compiler from
+ * inlining the function because inlining currently breaks the blacklisting
+ * mechanism of AddressSanitizer.
+ */
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+#  define UL_ASAN_BLACKLIST __attribute__((noinline)) __attribute__((no_sanitize_memory)) __attribute__((no_sanitize_address))
+# else
+#  define UL_ASAN_BLACKLIST	/* nothing */
+# endif
+#else
+# define UL_ASAN_BLACKLIST	/* nothing */
 #endif
 
 #endif /* UTIL_LINUX_C_H */
