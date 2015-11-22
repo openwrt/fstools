@@ -1311,7 +1311,7 @@ static int main_swapon(int argc, char **argv)
 				return -1;
 			}
 			while (getline(&lineptr, &s, fp) > 0)
-				printf(lineptr);
+				printf("%s", lineptr);
 			if (lineptr)
 				free(lineptr);
 			fclose(fp);
