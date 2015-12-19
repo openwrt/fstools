@@ -117,6 +117,8 @@ int main(int argc, char **argv)
 {
 	if (argc < 2)
 		return start(argc, argv);
+	if (!strcmp(argv[1], "ram"))
+		return ramoverlay();
 	if (!strcmp(argv[1], "stop"))
 		return stop(argc, argv);
 	if (!strcmp(argv[1], "done"))
