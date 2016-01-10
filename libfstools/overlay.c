@@ -311,6 +311,9 @@ int fs_state_set(const char *dir, enum fs_state state)
 	char valstr[16];
 	char *path;
 
+	if (fs_state_get(dir) == state)
+		return 0;
+
 	path = alloca(strlen(dir) + 1 + sizeof("/.fs_state"));
 	sprintf(path, "%s/.fs_state", dir);
 	unlink(path);
