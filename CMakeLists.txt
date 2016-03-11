@@ -11,6 +11,7 @@ ADD_LIBRARY(fstools SHARED
 		libfstools/overlay.c
 		libfstools/volume.c
 		libfstools/mtd.c
+		libfstools/ext4.c
 		libfstools/mount.c
 		libfstools/ubi.c
 		libfstools/find.c)
