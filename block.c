@@ -1101,7 +1101,8 @@ static int mount_extroot(char *cfg)
 		if (check_fs)
 			check_filesystem(pr);
 
-		err = mount(pr->dev, path, pr->id->name, 0, (m->options) ? (m->options) : (""));
+		err = mount(pr->dev, path, pr->id->name, m->flags,
+		            (m->options) ? (m->options) : (""));
 
 		if (err) {
 			ULOG_ERR("extroot: mounting %s (%s) on %s failed: %d (%s)\n",
