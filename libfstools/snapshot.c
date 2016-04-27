@@ -39,7 +39,7 @@ verify_file_hash(char *file, uint32_t *hash)
 {
 	uint32_t md5[4];
 
-	if (md5sum(file, md5)) {
+	if (md5sum(file, md5) <= 0) {
 		ULOG_ERR("failed to generate md5 sum\n");
 		return -1;
 	}
@@ -120,7 +120,7 @@ snapshot_write_file(struct volume *v, int block, char *file, uint32_t seq, uint3
 	int in = 0, len, offset;
 	int ret = -1;
 
-	if (stat(file, &s) || md5sum(file, md5)) {
+	if (stat(file, &s) || md5sum(file, md5) != s.st_size) {
 		ULOG_ERR("stat failed on %s\n", file);
 		goto out;
 	}
