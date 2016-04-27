@@ -1434,6 +1434,14 @@ int main(int argc, char **argv)
 
 		if (!strcmp(argv[1], "umount"))
 			return main_umount(argc, argv);
+
+		if (!strcmp(argv[1], "remount")) {
+			int ret = main_umount(argc, argv);
+
+			if (!ret)
+				ret = main_mount(argc, argv);
+			return ret;
+		}
 	}
 
 	ULOG_ERR("Usage: block <info|mount|umount|detect>\n");
