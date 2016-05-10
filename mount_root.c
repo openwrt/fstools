@@ -27,14 +27,16 @@
 static int
 start(int argc, char *argv[1])
 {
-	struct volume *root;
+	struct volume *root = volume_find("rootfs");
 	struct volume *data = volume_find("rootfs_data");
 
-	if (!getenv("PREINIT"))
+	if (data && find_mount_point(data->blk, 0))
+		return -1;
+
+	if (root && find_mount_point(root->blk, 0))
 		return -1;
 
 	if (!data) {
-		root = volume_find("rootfs");
 		volume_init(root);
 		ULOG_NOTE("mounting /dev/root\n");
 		mount("/dev/root", "/", NULL, MS_NOATIME | MS_REMOUNT, 0);
