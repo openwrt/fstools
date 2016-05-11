@@ -47,7 +47,6 @@ enum {
 	NANDFLASH,
 	NORFLASH,
 	UBIVOLUME,
-	EXT4VOLUME,
 };
 
 struct volume {

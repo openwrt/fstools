@@ -102,8 +102,7 @@ find_mount_point(char *block, int mtd_only)
 
 			if (mtd_only &&
 			    strncmp(t, "jffs2", 5) &&
-			    strncmp(t, "ubifs", 5) &&
-			    strncmp(t, "ext4", 4)) {
+			    strncmp(t, "ubifs", 5)) {
 				fclose(fp);
 				ULOG_ERR("block is mounted with wrong fs\n");
 				return NULL;

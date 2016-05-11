@@ -245,16 +245,6 @@ jffs2_switch(struct volume *v)
 			ret = -1;
 		}
 		break;
-
-	case FS_EXT4FS:
-		ret = overlay_mount(v, "ext4");
-		if (ret)
-			break;
-		if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
-			ULOG_ERR("switching to ext4fs failed\n");
-			ret = -1;
-		}
-		break;
 	}
 
 	if (ret)
@@ -279,10 +269,6 @@ static int overlay_mount_fs(struct volume *v)
 	switch (volume_identify(v)) {
 	case FS_UBIFS:
 		fstype = "ubifs";
-		break;
-
-	case FS_EXT4FS:
-		fstype = "ext4";
 		break;
 	}
 
