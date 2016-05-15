@@ -12,6 +12,9 @@
  */
 
 #include <sys/mount.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -29,8 +32,9 @@ start(int argc, char *argv[1])
 {
 	struct volume *root;
 	struct volume *data = volume_find("rootfs_data");
+	struct stat s;
 
-	if (!getenv("PREINIT"))
+	if (!getenv("PREINIT") && stat("/tmp/.preinit", &s))
 		return -1;
 
 	if (!data) {
