@@ -170,6 +170,10 @@ static const struct mount_flag mount_flags[] = {
 	{ "relatime",		MS_RELATIME	},
 	{ "norelatime",		~MS_RELATIME	},
 	{ "strictatime",	MS_STRICTATIME	},
+	{ "acl",		MS_POSIXACL	},
+	{ "noacl",		~MS_POSIXACL	},
+	{ "nouser_xattr",	MS_NOUSER	},
+	{ "user_xattr",		~MS_NOUSER	},
 };
 
 static char *blobmsg_get_strdup(struct blob_attr *attr)
