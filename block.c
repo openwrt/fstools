@@ -628,31 +628,37 @@ static void check_filesystem(struct blkid_struct_probe *pr)
 	pid_t pid;
 	struct stat statbuf;
 	const char *e2fsck = "/usr/sbin/e2fsck";
+	const char *dosfsck = "/usr/sbin/dosfsck";
+	const char *ckfs;
 
 	/* UBIFS does not need stuff like fsck */
 	if (!strncmp(pr->id->name, "ubifs", 5))
 		return;
 
-	if (strncmp(pr->id->name, "ext", 3)) {
+	if (!strncmp(pr->id->name, "vfat", 4)) {
+		ckfs = dosfsck;
+	} else if (!strncmp(pr->id->name, "ext", 3)) {
+		ckfs = e2fsck;
+	} else {
 		ULOG_ERR("check_filesystem: %s is not supported\n", pr->id->name);
 		return;
 	}
 
-	if (stat(e2fsck, &statbuf) < 0) {
-		ULOG_ERR("check_filesystem: %s not found\n", e2fsck);
+	if (stat(ckfs, &statbuf) < 0) {
+		ULOG_ERR("check_filesystem: %s not found\n", ckfs);
 		return;
 	}
 
 	pid = fork();
 	if (!pid) {
-		execl(e2fsck, e2fsck, "-p", pr->dev, NULL);
+		execl(ckfs, ckfs, "-p", pr->dev, NULL);
 		exit(-1);
 	} else if (pid > 0) {
 		int status;
 
 		waitpid(pid, &status, 0);
 		if (WEXITSTATUS(status))
-			ULOG_ERR("check_filesystem: %s returned %d\n", e2fsck, WEXITSTATUS(status));
+			ULOG_ERR("check_filesystem: %s returned %d\n", ckfs, WEXITSTATUS(status));
 	}
 }
 
