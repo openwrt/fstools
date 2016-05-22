@@ -29,6 +29,8 @@
 #include <sys/mount.h>
 #include <sys/wait.h>
 
+#include <linux/fs.h>
+
 #include <uci.h>
 #include <uci_blob.h>
 
@@ -146,18 +148,6 @@ struct mount_flag {
 	const char *name;
 	int32_t flag;
 };
-
-#ifndef MS_DIRSYNC
-#	define MS_DIRSYNC		(1 << 7)
-#endif
-
-#ifndef MS_RELATIME
-#	define MS_RELATIME		(1 << 21)
-#endif
-
-#ifndef MS_STRICTATIME
-#	define MS_STRICTATIME	(1 << 24)
-#endif
 
 static const struct mount_flag mount_flags[] = {
 	{ "sync",		MS_SYNCHRONOUS	},
