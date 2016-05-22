@@ -627,7 +627,7 @@ static void check_filesystem(struct blkid_struct_probe *pr)
 {
 	pid_t pid;
 	struct stat statbuf;
-	char *e2fsck = "/usr/sbin/e2fsck";
+	const char *e2fsck = "/usr/sbin/e2fsck";
 
 	/* UBIFS does not need stuff like fsck */
 	if (!strncmp(pr->id->name, "ubifs", 5))
