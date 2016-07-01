@@ -38,6 +38,9 @@ ADD_LIBRARY(ubi-utils STATIC
 		libubi/ubiutils-common.c)
 INSTALL(TARGETS ubi-utils ARCHIVE DESTINATION lib)
 
+FIND_PATH(ubox_include_dir libubox/ulog.h)
+INCLUDE_DIRECTORIES(${ubox_include_dir})
+
 SET_TARGET_PROPERTIES(ubi-utils PROPERTIES COMPILE_FLAGS
 		"-ffunction-sections -fdata-sections")
 
