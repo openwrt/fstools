@@ -53,12 +53,14 @@ ADD_EXECUTABLE(mount_root mount_root.c)
 TARGET_LINK_LIBRARIES(mount_root fstools)
 INSTALL(TARGETS mount_root RUNTIME DESTINATION sbin)
 
+find_library(json NAMES json-c json)
+
 ADD_EXECUTABLE(block block.c)
 IF(DEFINED CMAKE_UBIFS_EXTROOT)
 	ADD_DEFINITIONS(-DUBIFS_EXTROOT)
-	TARGET_LINK_LIBRARIES(block blkid-tiny uci ubox blobmsg_json ubi-utils)
+	TARGET_LINK_LIBRARIES(block blkid-tiny uci ubox blobmsg_json ubi-utils ${json})
 ELSE(DEFINED CMAKE_UBIFS_EXTROOT)
-	TARGET_LINK_LIBRARIES(block blkid-tiny uci ubox blobmsg_json)
+	TARGET_LINK_LIBRARIES(block blkid-tiny uci ubox blobmsg_json ${json})
 ENDIF(DEFINED CMAKE_UBIFS_EXTROOT)
 INSTALL(TARGETS block RUNTIME DESTINATION sbin)
 
