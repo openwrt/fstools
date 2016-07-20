@@ -506,7 +506,7 @@ static void cache_load(int mtd)
 	if (mtd) {
 		_cache_load("/dev/mtdblock*");
 		_cache_load("/dev/ubiblock*");
-		_cache_load("/dev/ubi?*_?*");
+		_cache_load("/dev/ubi[0-9]*");
 	}
 	_cache_load("/dev/mmcblk*");
 	_cache_load("/dev/sd*");
