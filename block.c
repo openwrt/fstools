@@ -464,6 +464,16 @@ static int config_load(char *cfg)
 static struct blkid_struct_probe* _probe_path(char *path)
 {
 	struct blkid_struct_probe *pr;
+	char tmppath[64];
+
+	/* skip ubi device if ubiblock device is present */
+	if (path[5] == 'u' && path[6] == 'b' && path[7] == 'i' &&
+	    path[8] >= '0' && path[8] <= '9' ) {
+		snprintf(tmppath, sizeof(tmppath), "/dev/ubiblock%s", path + 8);
+		list_for_each_entry(pr, &devices, list)
+			if (!strcasecmp(pr->dev, tmppath))
+				return NULL;
+	}
 
 	pr = malloc(sizeof(*pr));
 
