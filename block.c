@@ -1277,7 +1277,7 @@ static int main_info(int argc, char **argv)
 			ULOG_ERR("failed to stat %s\n", argv[i]);
 			continue;
 		}
-		if (!S_ISBLK(s.st_mode)) {
+		if (!S_ISBLK(s.st_mode) && !(S_ISCHR(s.st_mode) && major(s.st_rdev) == 250)) {
 			ULOG_ERR("%s is not a block device\n", argv[i]);
 			continue;
 		}
