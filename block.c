@@ -727,6 +727,7 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 {
 	struct mount *m;
 	char *device;
+	char *mp;
 
 	if (!pr)
 		return -1;
@@ -746,8 +747,9 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 	if (hotplug && !auto_mount)
 		return -1;
 
-	if (find_mount_point(pr->dev)) {
-		ULOG_ERR("%s is already mounted\n", pr->dev);
+	mp = find_mount_point(pr->dev);
+	if (mp) {
+		ULOG_ERR("%s is already mounted on %s\n", pr->dev, mp);
 		return -1;
 	}
 
