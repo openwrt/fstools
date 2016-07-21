@@ -588,9 +588,10 @@ static struct blkid_struct_probe* find_block_info(char *uuid, char *label, char 
 static char* find_mount_point(char *block)
 {
 	FILE *fp = fopen("/proc/mounts", "r");
-	static char line[256];
+	static char line[256], *saveptr;
 	int len = strlen(block);
 	char *point = NULL;
+	struct stat s;
 
 	if(!fp)
 		return NULL;
@@ -606,6 +607,32 @@ static char* find_mount_point(char *block)
 			}
 			*t = '\0';
 			point = p;
+			break;
+		}
+	}
+
+	fclose(fp);
+
+	if (point)
+		return point;
+
+	if (stat(block, &s))
+		return NULL;
+
+	if (!S_ISBLK(s.st_mode))
+		return NULL;
+
+	fp = fopen("/proc/self/mountinfo", "r");
+	if(!fp)
+		return NULL;
+
+	while (fgets(line, sizeof(line), fp)) {
+		strtok_r(line, " \t", &saveptr);
+		strtok_r(NULL, " \t", &saveptr);
+		if (atoi(strtok_r(NULL, ":", &saveptr)) == major(s.st_rdev) &&
+		    atoi(strtok_r(NULL, " \t", &saveptr)) == minor(s.st_rdev)) {
+			strtok_r(NULL, " \t", &saveptr);
+			point = strtok_r(NULL, " \t", &saveptr);
 			break;
 		}
 	}
