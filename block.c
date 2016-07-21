@@ -753,7 +753,7 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 	}
 
 	if (anon_mount) {
-		char target[] = "/mnt/mmcblk123";
+		char target[32];
 		int err = 0;
 
 		snprintf(target, sizeof(target), "/mnt/%s", device);
