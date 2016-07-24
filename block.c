@@ -526,25 +526,6 @@ static void cache_load(int mtd)
 	_cache_load("/dev/mapper/*");
 }
 
-static int print_block_info(struct blkid_struct_probe *pr)
-{
-	printf("%s:", pr->dev);
-	if (pr->uuid[0])
-		printf(" UUID=\"%s\"", pr->uuid);
-
-	if (pr->label[0])
-		printf(" LABEL=\"%s\"", pr->label);
-
-	if (pr->name[0])
-		printf(" NAME=\"%s\"", pr->name);
-
-	if (pr->version[0])
-		printf(" VERSION=\"%s\"", pr->version);
-
-	printf(" TYPE=\"%s\"\n", pr->id->name);
-
-	return 0;
-}
 
 static int print_block_uci(struct blkid_struct_probe *pr)
 {
@@ -674,6 +655,34 @@ static char* find_mount_point(char *block)
 	fclose(fp);
 
 	return point;
+}
+
+static int print_block_info(struct blkid_struct_probe *pr)
+{
+	static char *mp;
+
+	mp = find_mount_point(pr->dev);
+	printf("%s:", pr->dev);
+	if (pr->uuid[0])
+		printf(" UUID=\"%s\"", pr->uuid);
+
+	if (pr->label[0])
+		printf(" LABEL=\"%s\"", pr->label);
+
+	if (pr->name[0])
+		printf(" NAME=\"%s\"", pr->name);
+
+	if (pr->version[0])
+		printf(" VERSION=\"%s\"", pr->version);
+
+	if (mp) {
+		printf(" MOUNT=\"%s\"", mp);
+		free(mp);
+	}
+
+	printf(" TYPE=\"%s\"\n", pr->id->name);
+
+	return 0;
 }
 
 static void mkdir_p(char *dir)
