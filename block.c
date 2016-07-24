@@ -592,13 +592,13 @@ static char* find_mount_point(char *block)
 	int len = strlen(block);
 	char *point = NULL, *pos, *tmp, *cpoint, *devname;
 	struct stat s;
+	int rstat;
 	unsigned int minor, major;
 
 	if (!fp)
 		return NULL;
 
-	if (stat(block, &s))
-		return NULL;
+	rstat = stat(block, &s);
 
 	while (fgets(line, sizeof(line), fp)) {
 		pos = strchr(line, ' ');
@@ -657,6 +657,9 @@ static char* find_mount_point(char *block)
 			point = strdup(cpoint);
 			break;
 		}
+
+		if (rstat)
+			continue;
 
 		if (!S_ISBLK(s.st_mode))
 			continue;
