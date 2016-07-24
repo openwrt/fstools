@@ -587,52 +587,83 @@ static struct blkid_struct_probe* find_block_info(char *uuid, char *label, char 
 
 static char* find_mount_point(char *block)
 {
-	FILE *fp = fopen("/proc/mounts", "r");
-	static char line[256], *saveptr;
+	FILE *fp = fopen("/proc/self/mountinfo", "r");
+	static char line[256];
 	int len = strlen(block);
-	char *point = NULL;
+	char *point = NULL, *pos, *tmp, *cpoint, *devname;
 	struct stat s;
+	unsigned int minor, major;
 
-	if(!fp)
+	if (!fp)
 		return NULL;
-
-	while (fgets(line, sizeof(line), fp)) {
-		if (!strncmp(line, block, len)) {
-			char *p = &line[len + 1];
-			char *t = strstr(p, " ");
-
-			if (!t) {
-				fclose(fp);
-				return NULL;
-			}
-			*t = '\0';
-			point = p;
-			break;
-		}
-	}
-
-	fclose(fp);
-
-	if (point)
-		return point;
 
 	if (stat(block, &s))
 		return NULL;
 
-	if (!S_ISBLK(s.st_mode))
-		return NULL;
-
-	fp = fopen("/proc/self/mountinfo", "r");
-	if(!fp)
-		return NULL;
-
 	while (fgets(line, sizeof(line), fp)) {
-		strtok_r(line, " \t", &saveptr);
-		strtok_r(NULL, " \t", &saveptr);
-		if (atoi(strtok_r(NULL, ":", &saveptr)) == major(s.st_rdev) &&
-		    atoi(strtok_r(NULL, " \t", &saveptr)) == minor(s.st_rdev)) {
-			strtok_r(NULL, " \t", &saveptr);
-			point = strtok_r(NULL, " \t", &saveptr);
+		pos = strchr(line, ' ');
+		if (!pos)
+			continue;
+
+		pos = strchr(pos + 1, ' ');
+		if (!pos)
+			continue;
+
+		tmp = ++pos;
+		pos = strchr(pos, ':');
+		if (!pos)
+			continue;
+
+		*pos = '\0';
+		major = atoi(tmp);
+		tmp = ++pos;
+		pos = strchr(pos, ' ');
+		if (!pos)
+			continue;
+
+		*pos = '\0';
+		minor = atoi(tmp);
+		pos = strchr(pos + 1, ' ');
+		if (!pos)
+			continue;
+		tmp = ++pos;
+
+		pos = strchr(pos, ' ');
+		if (!pos)
+			continue;
+		*pos = '\0';
+		cpoint = tmp;
+
+		pos = strchr(pos + 1, ' ');
+		if (!pos)
+			continue;
+
+		pos = strchr(pos + 1, ' ');
+		if (!pos)
+			continue;
+
+		pos = strchr(pos + 1, ' ');
+		if (!pos)
+			continue;
+
+		tmp = ++pos;
+		pos = strchr(pos, ' ');
+		if (!pos)
+			continue;
+
+		*pos = '\0';
+		devname = tmp;
+		if (!strncmp(block, devname, len)) {
+			point = strdup(cpoint);
+			break;
+		}
+
+		if (!S_ISBLK(s.st_mode))
+			continue;
+
+		if (major == major(s.st_rdev) &&
+		    minor == minor(s.st_rdev)) {
+			point = strdup(cpoint);
 			break;
 		}
 	}
@@ -750,6 +781,7 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 	mp = find_mount_point(pr->dev);
 	if (mp) {
 		ULOG_ERR("%s is already mounted on %s\n", pr->dev, mp);
+		free(mp);
 		return -1;
 	}
 
@@ -832,6 +864,7 @@ static int umount_device(struct blkid_struct_probe *pr)
 		ULOG_INFO("unmounted %s (%s)\n",
 		          pr->dev, mp);
 
+	free(mp);
 	return err;
 }
 
@@ -857,6 +890,7 @@ static int main_hotplug(int argc, char **argv)
 			ULOG_ERR("umount of %s failed (%d) - %s\n",
 			         mount_point, err, strerror(err));
 
+		free(mount_point);
 		return 0;
 	} else if (strcmp(action, "add")) {
 		ULOG_ERR("Unkown action %s\n", action);
