@@ -280,7 +280,7 @@ static int overlay_mount_fs(struct volume *v)
 		return -1;
 	}
 
-	return -1;
+	return 0;
 }
 
 enum fs_state fs_state_get(const char *dir)
