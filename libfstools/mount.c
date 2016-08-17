@@ -82,7 +82,7 @@ pivot(char *new, char *old)
 int
 fopivot(char *rw_root, char *ro_root)
 {
-	char overlay[64], lowerdir[64];
+	char overlay[64], mount_options[64];
 
 	if (find_filesystem("overlay")) {
 		ULOG_ERR("BUG: no suitable fs found\n");
@@ -96,8 +96,8 @@ fopivot(char *rw_root, char *ro_root)
 	 * If it fails, it means that we are probably using a v23 and
 	 * later versions that require a workdir
 	 */
-	snprintf(lowerdir, sizeof(lowerdir), "lowerdir=/,upperdir=%s", rw_root);
-	if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, lowerdir)) {
+	snprintf(mount_options, sizeof(mount_options), "lowerdir=/,upperdir=%s", rw_root);
+	if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, mount_options)) {
 		char upperdir[64], workdir[64], upgrade[64], upgrade_dest[64];
 		struct stat st;
 
@@ -105,7 +105,7 @@ fopivot(char *rw_root, char *ro_root)
 		snprintf(workdir, sizeof(workdir), "%s/work", rw_root);
 		snprintf(upgrade, sizeof(upgrade), "%s/sysupgrade.tgz", rw_root);
 		snprintf(upgrade_dest, sizeof(upgrade_dest), "%s/sysupgrade.tgz", upperdir);
-		snprintf(lowerdir, sizeof(lowerdir), "lowerdir=/,upperdir=%s,workdir=%s",
+		snprintf(mount_options, sizeof(mount_options), "lowerdir=/,upperdir=%s,workdir=%s",
 			 upperdir, workdir);
 
 		/*
@@ -122,10 +122,10 @@ fopivot(char *rw_root, char *ro_root)
 		    rename(upgrade, upgrade_dest);
 
 		/* Mainlined overlayfs has been renamed to "overlay", try that first */
-		if (mount(overlay, "/mnt", "overlay", MS_NOATIME, lowerdir)) {
-			if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, lowerdir)) {
+		if (mount(overlay, "/mnt", "overlay", MS_NOATIME, mount_options)) {
+			if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, mount_options)) {
 				ULOG_ERR("mount failed: %s, options %s\n",
-				         strerror(errno), lowerdir);
+				         strerror(errno), mount_options);
 				return -1;
 			}
 		}
