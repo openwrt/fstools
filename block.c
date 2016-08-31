@@ -1108,7 +1108,7 @@ static int check_extroot(char *path)
 				         tag, errno, strerror(errno));
 			fclose(fp);
 
-			if (*uuid || !strcasecmp(uuid, pr->uuid))
+			if (*uuid && !strcasecmp(uuid, pr->uuid))
 				return 0;
 
 			ULOG_ERR("extroot: UUID mismatch (root: %s, %s: %s)\n",
