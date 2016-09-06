@@ -18,11 +18,6 @@
 #include "libfstools.h"
 #include "volume.h"
 
-enum {
-	FLASH_NOR,
-	FLASH_NAND,
-};
-
 static LIST_HEAD(drivers);
 
 void
