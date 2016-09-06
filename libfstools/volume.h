@@ -21,7 +21,7 @@ struct volume;
 typedef int (*volume_probe_t)(void);
 typedef int (*volume_init_t)(struct volume *v);
 typedef void (*volume_stop_t)(struct volume *v);
-typedef int (*volume_find_t)(struct volume *v, char *name);
+typedef struct volume *(*volume_find_t)(char *name);
 typedef int (*volume_identify_t)(struct volume *v);
 typedef int (*volume_read_t)(struct volume *v, void *buf, int offset, int length);
 typedef int (*volume_write_t)(struct volume *v, void *buf, int offset, int length);
@@ -51,7 +51,6 @@ enum {
 
 struct volume {
 	struct driver	*drv;
-	void		*priv;
 	char		*name;
 	char		*blk;
 

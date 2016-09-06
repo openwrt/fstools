@@ -27,7 +27,8 @@
 
 #define PATH_MAX		256
 
-struct mtd_priv {
+struct mtd_volume {
+	struct volume v;
 	int	fd;
 	int	idx;
 	char	*chr;
@@ -60,10 +61,8 @@ static int mtd_open(const char *mtd, int block)
 	return open(mtd, flags);
 }
 
-static void mtd_volume_close(struct volume *v)
+static void mtd_volume_close(struct mtd_volume *p)
 {
-	struct mtd_priv *p = (struct mtd_priv*) v->priv;
-
 	if (!p->fd)
 		return;
 
@@ -71,9 +70,9 @@ static void mtd_volume_close(struct volume *v)
 	p->fd = 0;
 }
 
-static int mtd_volume_load(struct volume *v)
+static int mtd_volume_load(struct mtd_volume *p)
 {
-	struct mtd_priv *p = (struct mtd_priv*) v->priv;
+	struct volume *v = &p->v;
 	struct mtd_info_user mtdInfo;
 	struct erase_info_user mtdLockInfo;
 
@@ -91,7 +90,7 @@ static int mtd_volume_load(struct volume *v)
 	}
 
 	if (ioctl(p->fd, MEMGETINFO, &mtdInfo)) {
-		mtd_volume_close(v);
+		mtd_volume_close(p);
 		ULOG_ERR("Could not get MTD device info from %s\n", p->chr);
 		return -1;
 	}
@@ -148,20 +147,21 @@ static char* mtd_find_index(char *name)
 	return index;
 }
 
-static int mtd_volume_find(struct volume *v, char *name)
+static struct volume *mtd_volume_find(char *name)
 {
 	char *idx = mtd_find_index(name);
-	struct mtd_priv *p;
+	struct mtd_volume *p;
+	struct volume *v;
 	char buffer[32];
 
 	if (!idx)
-		return -1;
+		return NULL;
 
-	p = calloc(1, sizeof(struct mtd_priv));
+	p = calloc(1, sizeof(struct mtd_volume));
 	if (!p)
-		return -1;
+		return NULL;
 
-	v->priv = p;
+	v = &p->v;
 	v->name = strdup(name);
 	v->drv = &mtd_driver;
 	p->idx = atoi(idx);
@@ -172,22 +172,23 @@ static int mtd_volume_find(struct volume *v, char *name)
 	snprintf(buffer, sizeof(buffer), "/dev/mtd%s", idx);
 	p->chr = strdup(buffer);
 
-	if (mtd_volume_load(v)) {
+	if (mtd_volume_load(p)) {
 		ULOG_ERR("reading %s failed\n", v->name);
-		return -1;
+		free(p);
+		return NULL;
 	}
 
-	return 0;
+	return v;
 }
 
 static int mtd_volume_identify(struct volume *v)
 {
-	struct mtd_priv *p = (struct mtd_priv*) v->priv;
+	struct mtd_volume *p = container_of(v, struct mtd_volume, v);;
 	__u32 deadc0de;
 	__u16 jffs2;
 	size_t sz;
 
-	if (mtd_volume_load(v)) {
+	if (mtd_volume_load(p)) {
 		ULOG_ERR("reading %s failed\n", v->name);
 		return -1;
 	}
@@ -221,11 +222,11 @@ static int mtd_volume_identify(struct volume *v)
 
 static int mtd_volume_erase(struct volume *v, int offset, int len)
 {
-	struct mtd_priv *p = (struct mtd_priv*) v->priv;
+	struct mtd_volume *p = container_of(v, struct mtd_volume, v);;
 	struct erase_info_user eiu;
 	int first_block, num_blocks;
 
-	if (mtd_volume_load(v))
+	if (mtd_volume_load(p))
 		return -1;
 
 	if (offset % v->block_size || len % v->block_size) {
@@ -246,26 +247,28 @@ static int mtd_volume_erase(struct volume *v, int offset, int len)
 			ULOG_ERR("Failed to erase block at 0x%x\n", eiu.start);
 	}
 
-	mtd_volume_close(v);
+	mtd_volume_close(p);
 
 	return 0;
 }
 
 static int mtd_volume_erase_all(struct volume *v)
 {
+	struct mtd_volume *p = container_of(v, struct mtd_volume, v);;
+
 	mtd_volume_erase(v, 0, v->size);
-	mtd_volume_close(v);
+	mtd_volume_close(p);
 
 	return 0;
 }
 
 static int mtd_volume_init(struct volume *v)
 {
-	struct mtd_priv *p = (struct mtd_priv*) v->priv;
+	struct mtd_volume *p = container_of(v, struct mtd_volume, v);;
 	struct mtd_info_user mtdinfo;
 	int ret;
 
-	if (mtd_volume_load(v))
+	if (mtd_volume_load(p))
 		return -1;
 
 	ret = ioctl(p->fd, MEMGETINFO, &mtdinfo);
@@ -284,9 +287,9 @@ static int mtd_volume_init(struct volume *v)
 
 static int mtd_volume_read(struct volume *v, void *buf, int offset, int length)
 {
-	struct mtd_priv *p = (struct mtd_priv*) v->priv;
+	struct mtd_volume *p = container_of(v, struct mtd_volume, v);;
 
-	if (mtd_volume_load(v))
+	if (mtd_volume_load(p))
 		return -1;
 
 	if (lseek(p->fd, offset, SEEK_SET) == (off_t) -1) {
@@ -304,9 +307,9 @@ static int mtd_volume_read(struct volume *v, void *buf, int offset, int length)
 
 static int mtd_volume_write(struct volume *v, void *buf, int offset, int length)
 {
-	struct mtd_priv *p = (struct mtd_priv*) v->priv;
+	struct mtd_volume *p = container_of(v, struct mtd_volume, v);;
 
-	if (mtd_volume_load(v))
+	if (mtd_volume_load(p))
 		return -1;
 
 	if (lseek(p->fd, offset, SEEK_SET) == (off_t) -1) {

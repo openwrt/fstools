@@ -26,7 +26,8 @@
  * from sysfs */
 const char *const ubi_dir_name = "/sys/devices/virtual/ubi";
 
-struct ubi_priv {
+struct ubi_volume {
+	struct volume v;
 	int		ubi_num;
 	int		ubi_volid;
 };
@@ -98,11 +99,9 @@ test_open(char *filename)
 
 static int ubi_volume_init(struct volume *v)
 {
+	struct ubi_volume *p = container_of(v, struct ubi_volume, v);
 	char voldir[BUFLEN], voldev[BUFLEN], *volname;
-	struct ubi_priv *p;
 	unsigned int volsize;
-
-	p = (struct ubi_priv*)v->priv;
 
 	snprintf(voldir, sizeof(voldir), "%s/ubi%u/ubi%u_%u",
 		ubi_dir_name, p->ubi_num, p->ubi_num, p->ubi_volid);
@@ -125,10 +124,10 @@ static int ubi_volume_init(struct volume *v)
 	return 0;
 }
 
-static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volid)
+static struct volume *ubi_volume_match(char *name, int ubi_num, int volid)
 {
 	char voldir[BUFLEN], volblkdev[BUFLEN], *volname;
-	struct ubi_priv *p;
+	struct ubi_volume *p;
 
 	snprintf(voldir, sizeof(voldir), "%s/ubi%u/ubi%u_%u",
 		ubi_dir_name, ubi_num, ubi_num, volid);
@@ -138,38 +137,37 @@ static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volid
 
 	/* skip if ubiblock device exists */
 	if (test_open(volblkdev))
-		return -1;
+		return NULL;
 
 	/* todo: skip existing gluebi device for legacy support */
 
 	volname = read_string_from_file(voldir, "name");
 	if (!volname) {
 		ULOG_ERR("Couldn't read %s/name\n", voldir);
-		return -1;
+		return NULL;
 	}
 
 	if (strncmp(name, volname, strlen(volname) + 1))
-		return -1;
+		return NULL;
 
-	p = calloc(1, sizeof(struct ubi_priv));
+	p = calloc(1, sizeof(struct ubi_volume));
 	if (!p)
-		return -1;
+		return NULL;
 
-	v->priv = p;
-	v->drv = &ubi_driver;
+	p->v.drv = &ubi_driver;
 	p->ubi_num = ubi_num;
 	p->ubi_volid = volid;
 
-	return 0;
+	return &p->v;
 }
 
-static int ubi_part_match(struct volume *v, char *name, unsigned int ubi_num)
+static struct volume *ubi_part_match(char *name, unsigned int ubi_num)
 {
 	DIR *ubi_dir;
 	struct dirent *ubi_dirent;
 	unsigned int volid;
 	char devdir[BUFLEN];
-	int ret = -1;
+	struct volume *ret = NULL;
 
 	snprintf(devdir, sizeof(devdir), "%s/ubi%u",
 		ubi_dir_name, ubi_num);
@@ -185,22 +183,21 @@ static int ubi_part_match(struct volume *v, char *name, unsigned int ubi_num)
 		if (sscanf(ubi_dirent->d_name, "ubi%*u_%u", &volid) != 1)
 			continue;
 
-		if (!ubi_volume_match(v, name, ubi_num, volid)) {
-			ret = 0;
+		ret = ubi_volume_match(name, ubi_num, volid);
+		if (ret)
 			break;
-		}
 	}
 	closedir(ubi_dir);
 
 	return ret;
 }
 
-static int ubi_volume_find(struct volume *v, char *name)
+static struct volume *ubi_volume_find(char *name)
 {
+	struct volume *ret = NULL;
 	DIR *ubi_dir;
 	struct dirent *ubi_dirent;
 	unsigned int ubi_num;
-	int ret = -1;
 
 	if (find_filesystem("ubifs"))
 		return ret;
@@ -216,10 +213,9 @@ static int ubi_volume_find(struct volume *v, char *name)
 			continue;
 
 		sscanf(ubi_dirent->d_name, "ubi%u", &ubi_num);
-		if (!ubi_part_match(v, name, ubi_num)) {
-			ret = 0;
+		ret = ubi_part_match(name, ubi_num);
+		if (ret)
 			break;
-		};
 	}
 	closedir(ubi_dir);
 	return ret;

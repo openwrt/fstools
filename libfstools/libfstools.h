@@ -17,6 +17,7 @@
 #include <libubox/list.h>
 #include <libubox/blob.h>
 #include <libubox/ulog.h>
+#include <libubox/utils.h>
 
 struct volume;
 

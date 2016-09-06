@@ -28,20 +28,16 @@ volume_register_driver(struct driver *d)
 
 struct volume* volume_find(char *name)
 {
-	struct volume *v = malloc(sizeof(struct volume));
+	struct volume *v;
 	struct driver *d;
 
-	if (!v)
-		return NULL;
-
 	list_for_each_entry(d, &drivers, list) {
-		memset(v, 0, sizeof(struct volume));
-
-		if (d->find && !d->find(v, name))
-			return v;
+		if (d->find) {
+			v = d->find(name);
+			if (v)
+				return v;
+		}
 	}
-
-	free(v);
 
 	return NULL;
 }
