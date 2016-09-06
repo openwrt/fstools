@@ -47,6 +47,7 @@ enum {
 	NANDFLASH,
 	NORFLASH,
 	UBIVOLUME,
+	BLOCKDEV,
 };
 
 struct volume {
