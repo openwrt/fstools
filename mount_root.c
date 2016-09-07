@@ -56,6 +56,7 @@ start(int argc, char *argv[1])
 	}
 
 	/* There isn't extroot, so just try to mount "rootfs_data" */
+	volume_init(data);
 	switch (volume_identify(data)) {
 	case FS_NONE:
 		ULOG_WARN("no usable overlay filesystem found, using tmpfs overlay\n");

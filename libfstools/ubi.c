@@ -160,7 +160,7 @@ static int ubi_volume_match(struct volume *v, char *name, int ubi_num, int volid
 	p->ubi_num = ubi_num;
 	p->ubi_volid = volid;
 
-	return ubi_volume_init(v);
+	return 0;
 }
 
 static int ubi_part_match(struct volume *v, char *name, unsigned int ubi_num)

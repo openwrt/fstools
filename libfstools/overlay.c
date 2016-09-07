@@ -111,7 +111,7 @@ overlay_mount(struct volume *v, char *fs)
 		return -1;
 	}
 
-	return volume_init(v);
+	return 0;
 }
 
 static int
@@ -206,6 +206,7 @@ jffs2_switch(struct volume *v)
 		return ret;
 	}
 
+	volume_init(v);
 	mp = find_mount_point(v->blk, 0);
 	if (mp) {
 		ULOG_ERR("rootfs_data:%s is already mounted as %s\n", v->blk, mp);
@@ -271,8 +272,6 @@ static int overlay_mount_fs(struct volume *v)
 		fstype = "ubifs";
 		break;
 	}
-
-	volume_init(v);
 
 	if (mount(v->blk, "/tmp/overlay", fstype, MS_NOATIME, NULL)) {
 		ULOG_ERR("failed to mount -t %s %s /tmp/overlay: %s\n",

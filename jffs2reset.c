@@ -125,6 +125,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	volume_init(v);
 	if (!strcmp(*argv, "jffs2mark"))
 		return jffs2_mark(v);
 	return jffs2_reset(v, reset);

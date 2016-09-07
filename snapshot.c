@@ -45,6 +45,7 @@ config_write(int argc, char **argv)
 	if (!v)
 		return -1;
 
+	volume_init(v);
 	ret = volatile_write(v, 0);
 	if (!ret)
 		ret = sentinel_write(v, 0);
@@ -63,6 +64,7 @@ config_read(int argc, char **argv)
 	if (!v)
 		return -1;
 
+	volume_init(v);
 	block = config_find(v, &conf, &sentinel);
 	next = snapshot_next_free(v, &seq);
 	if (is_config(&conf) && conf.seq == seq)
@@ -89,6 +91,7 @@ snapshot_write(int argc, char **argv)
 	if (!v)
 		return -1;
 
+	volume_init(v);
 	block = snapshot_next_free(v, &seq);
 	if (block < 0)
 		block = 0;
@@ -120,6 +123,8 @@ snapshot_mark(int argc, char **argv)
 		return -1;
 	}
 
+	volume_init(v);
+
 	fd = open(v->blk, O_WRONLY);
 	ULOG_INFO("%s - marking with 0x%08x\n", v->blk, owrt);
 	if (fd < 0) {
@@ -148,6 +153,7 @@ snapshot_read(int argc, char **argv)
 	if (!v)
 		return -1;
 
+	volume_init(v);
 	if (argc > 2) {
 		block = atoi(argv[2]);
 		if (block >= (v->size / v->block_size)) {
@@ -180,6 +186,7 @@ snapshot_info(void)
 	if (!v)
 		return -1;
 
+	volume_init(v);
 	ULOG_INFO("sectors:\t%" PRIu64 ", block_size:\t%dK\n",
 		  (uint64_t) v->size / v->block_size, v->block_size / 1024);
 	do {
