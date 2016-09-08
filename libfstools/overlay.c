@@ -195,6 +195,8 @@ handle_whiteout(const char *dir)
 static char *overlay_fs_name(int type)
 {
 	switch (type) {
+		case FS_EXT4:
+			return "ext4";
 		case FS_F2FS:
 			return "f2fs";
 		case FS_UBIFS:
@@ -241,6 +243,7 @@ jffs2_switch(struct volume *v)
 		foreachdir("/overlay/", handle_whiteout);
 		break;
 
+	case FS_EXT4:
 	case FS_F2FS:
 	case FS_UBIFS:
 		if (overlay_mount(v, overlay_fs_name(type)))

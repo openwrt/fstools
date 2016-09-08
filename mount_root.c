@@ -71,6 +71,7 @@ start(int argc, char *argv[1])
 		ULOG_NOTE("jffs2 not ready yet, using temporary tmpfs overlay\n");
 		return ramoverlay();
 
+	case FS_EXT4:
 	case FS_F2FS:
 	case FS_JFFS2:
 	case FS_UBIFS:
@@ -110,6 +111,7 @@ done(int argc, char *argv[1])
 	case FS_DEADCODE:
 		return jffs2_switch(v);
 
+	case FS_EXT4:
 	case FS_F2FS:
 	case FS_JFFS2:
 	case FS_UBIFS:

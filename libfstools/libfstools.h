@@ -28,6 +28,7 @@ enum {
 	FS_DEADCODE,
 	FS_UBIFS,
 	FS_F2FS,
+	FS_EXT4,
 };
 
 enum fs_state {
