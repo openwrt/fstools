@@ -210,7 +210,7 @@ static char *overlay_fs_name(int type)
 int
 jffs2_switch(struct volume *v)
 {
-	char *mp;
+	char *mp, *fs_name;
 	int type;
 
 	if (find_overlay_mount("overlayfs:/tmp/root"))
@@ -229,6 +229,8 @@ jffs2_switch(struct volume *v)
 	}
 
 	type = volume_identify(v);
+	fs_name = overlay_fs_name(type);
+
 	switch (type) {
 	case FS_NONE:
 		ULOG_ERR("no jffs2 marker found\n");
@@ -246,10 +248,10 @@ jffs2_switch(struct volume *v)
 	case FS_EXT4:
 	case FS_F2FS:
 	case FS_UBIFS:
-		if (overlay_mount(v, overlay_fs_name(type)))
+		if (overlay_mount(v, fs_name))
 			return -1;
 		if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
-			ULOG_ERR("switching to jffs2 failed\n");
+			ULOG_ERR("switching to %s failed\n", fs_name);
 			return -1;
 		}
 		break;
@@ -320,7 +322,7 @@ int fs_state_set(const char *dir, enum fs_state state)
 
 int mount_overlay(struct volume *v)
 {
-	char *mp;
+	char *mp, *fs_name;
 
 	if (!v)
 		return -1;
@@ -354,9 +356,10 @@ int mount_overlay(struct volume *v)
 		break;
 	}
 
-	ULOG_INFO("switching to jffs2 overlay\n");
+	fs_name = overlay_fs_name(volume_identify(v));
+	ULOG_INFO("switching to %s overlay\n", fs_name);
 	if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
-		ULOG_ERR("switching to jffs2 failed - fallback to ramoverlay\n");
+		ULOG_ERR("switching to %s failed - fallback to ramoverlay\n", fs_name);
 		return ramoverlay();
 	}
 
