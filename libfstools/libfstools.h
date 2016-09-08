@@ -27,6 +27,7 @@ enum {
 	FS_JFFS2,
 	FS_DEADCODE,
 	FS_UBIFS,
+	FS_F2FS,
 };
 
 enum fs_state {
@@ -48,7 +49,7 @@ extern int ramoverlay(void);
 
 extern int find_overlay_mount(char *overlay);
 extern char* find_mount(char *mp);
-extern char* find_mount_point(char *block, int mtd_only);
+extern char* find_mount_point(char *block, int root_only);
 extern int find_filesystem(char *fs);
 
 extern int jffs2_switch(struct volume *v);

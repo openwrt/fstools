@@ -77,7 +77,7 @@ find_mount(char *mp)
 }
 
 char*
-find_mount_point(char *block, int mtd_only)
+find_mount_point(char *block, int root_only)
 {
 	FILE *fp = fopen("/proc/mounts", "r");
 	static char line[256];
@@ -100,7 +100,8 @@ find_mount_point(char *block, int mtd_only)
 			*t = '\0';
 			t++;
 
-			if (mtd_only &&
+			if (root_only &&
+			    strncmp(t, "f2fs", 4) &&
 			    strncmp(t, "jffs2", 5) &&
 			    strncmp(t, "ubifs", 5)) {
 				fclose(fp);

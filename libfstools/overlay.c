@@ -192,18 +192,31 @@ handle_whiteout(const char *dir)
 	return 0;
 }
 
+static char *overlay_fs_name(int type)
+{
+	switch (type) {
+		case FS_F2FS:
+			return "f2fs";
+		case FS_UBIFS:
+			return "ubifs";
+		case FS_JFFS2:
+		default:
+			return "jffs2";
+	}
+}
+
 int
 jffs2_switch(struct volume *v)
 {
 	char *mp;
-	int ret = -1;
+	int type;
 
 	if (find_overlay_mount("overlayfs:/tmp/root"))
 		return -1;
 
 	if (find_filesystem("overlay")) {
 		ULOG_ERR("overlayfs not supported by kernel\n");
-		return ret;
+		return -1;
 	}
 
 	volume_init(v);
@@ -213,43 +226,31 @@ jffs2_switch(struct volume *v)
 		return -1;
 	}
 
-	switch (volume_identify(v)) {
+	type = volume_identify(v);
+	switch (type) {
 	case FS_NONE:
 		ULOG_ERR("no jffs2 marker found\n");
 		/* fall through */
 
 	case FS_DEADCODE:
-		ret = switch2jffs(v);
-		if (!ret) {
-			ULOG_INFO("performing overlay whiteout\n");
-			umount2("/tmp/root", MNT_DETACH);
-			foreachdir("/overlay/", handle_whiteout);
-		}
+		if (switch2jffs(v))
+			return -1;
+
+		ULOG_INFO("performing overlay whiteout\n");
+		umount2("/tmp/root", MNT_DETACH);
+		foreachdir("/overlay/", handle_whiteout);
 		break;
 
-	case FS_JFFS2:
-		ret = overlay_mount(v, "jffs2");
-		if (ret)
-			break;
+	case FS_F2FS:
+	case FS_UBIFS:
+		if (overlay_mount(v, overlay_fs_name(type)))
+			return -1;
 		if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
 			ULOG_ERR("switching to jffs2 failed\n");
-			ret = -1;
-		}
-		break;
-
-	case FS_UBIFS:
-		ret = overlay_mount(v, "ubifs");
-		if (ret)
-			break;
-		if (mount_move("/tmp", "", "/overlay") || fopivot("/overlay", "/rom")) {
-			ULOG_ERR("switching to ubifs failed\n");
-			ret = -1;
+			return -1;
 		}
 		break;
 	}
-
-	if (ret)
-		return ret;
 
 	sync();
 	fs_state_set("/overlay", FS_STATE_READY);
@@ -258,19 +259,11 @@ jffs2_switch(struct volume *v)
 
 static int overlay_mount_fs(struct volume *v)
 {
-	char *fstype;
+	char *fstype = overlay_fs_name(volume_identify(v));
 
 	if (mkdir("/tmp/overlay", 0755)) {
 		ULOG_ERR("failed to mkdir /tmp/overlay: %s\n", strerror(errno));
 		return -1;
-	}
-
-	fstype = "jffs2";
-
-	switch (volume_identify(v)) {
-	case FS_UBIFS:
-		fstype = "ubifs";
-		break;
 	}
 
 	if (mount(v->blk, "/tmp/overlay", fstype, MS_NOATIME, NULL)) {

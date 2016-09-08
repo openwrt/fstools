@@ -71,6 +71,7 @@ start(int argc, char *argv[1])
 		ULOG_NOTE("jffs2 not ready yet, using temporary tmpfs overlay\n");
 		return ramoverlay();
 
+	case FS_F2FS:
 	case FS_JFFS2:
 	case FS_UBIFS:
 		mount_overlay(data);
@@ -109,6 +110,7 @@ done(int argc, char *argv[1])
 	case FS_DEADCODE:
 		return jffs2_switch(v);
 
+	case FS_F2FS:
 	case FS_JFFS2:
 	case FS_UBIFS:
 		fs_state_set("/overlay", FS_STATE_READY);
