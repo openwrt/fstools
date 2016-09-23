@@ -264,7 +264,7 @@ static int rootdisk_volume_init(struct volume *v)
 		if (rootdisk_use_f2fs(p))
 			snprintf(str, sizeof(str), "mkfs.f2fs -l rootfs_data %s", v->blk);
 		else
-			snprintf(str, sizeof(str), "mkfs.ext4 %s", v->blk);
+			snprintf(str, sizeof(str), "mkfs.ext4 -L rootfs_data %s", v->blk);
 		system(str);
 		break;
 	default:
