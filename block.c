@@ -518,6 +518,7 @@ static void cache_load(int mtd)
 		_cache_load("/dev/ubiblock*");
 		_cache_load("/dev/ubi[0-9]*");
 	}
+	_cache_load("/dev/loop*");
 	_cache_load("/dev/mmcblk*");
 	_cache_load("/dev/sd*");
 	_cache_load("/dev/hd*");
