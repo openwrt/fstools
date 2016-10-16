@@ -40,7 +40,7 @@
 #include <libubox/blobmsg_json.h>
 #include <libubox/avl-cmp.h>
 
-#include "libblkid-tiny/libblkid-tiny.h"
+#include "probe.h"
 
 #ifdef UBIFS_EXTROOT
 #include "libubi/libubi.h"
@@ -461,9 +461,9 @@ static int config_load(char *cfg)
 	return 0;
 }
 
-static struct blkid_struct_probe* _probe_path(char *path)
+static struct probe_info* _probe_path(char *path)
 {
-	struct blkid_struct_probe *pr;
+	struct probe_info *pr;
 	char tmppath[64];
 
 	/* skip ubi device if ubiblock device is present */
@@ -475,20 +475,7 @@ static struct blkid_struct_probe* _probe_path(char *path)
 				return NULL;
 	}
 
-	pr = malloc(sizeof(*pr));
-
-	if (!pr)
-		return NULL;
-
-	memset(pr, 0, sizeof(*pr));
-	probe_block(path, pr);
-
-	if (pr->err || !pr->id) {
-		free(pr);
-		return NULL;
-	}
-
-	return pr;
+	return probe_path(path);
 }
 
 static int _cache_load(const char *path)
@@ -501,7 +488,7 @@ static int _cache_load(const char *path)
 		return -1;
 
 	for (j = 0; j < gl.gl_pathc; j++) {
-		struct blkid_struct_probe *pr = _probe_path(gl.gl_pathv[j]);
+		struct probe_info *pr = _probe_path(gl.gl_pathv[j]);
 		if (pr)
 			list_add_tail(&pr->list, &devices);
 	}
@@ -528,15 +515,15 @@ static void cache_load(int mtd)
 }
 
 
-static int print_block_uci(struct blkid_struct_probe *pr)
+static int print_block_uci(struct probe_info *pr)
 {
-	if (!strcmp(pr->id->name, "swap")) {
+	if (!strcmp(pr->type, "swap")) {
 		printf("config 'swap'\n");
 	} else {
 		printf("config 'mount'\n");
 		printf("\toption\ttarget\t'/mnt/%s'\n", basename(pr->dev));
 	}
-	if (pr->uuid[0])
+	if (pr->uuid)
 		printf("\toption\tuuid\t'%s'\n", pr->uuid);
 	else
 		printf("\toption\tdevice\t'%s'\n", pr->dev);
@@ -545,23 +532,23 @@ static int print_block_uci(struct blkid_struct_probe *pr)
 	return 0;
 }
 
-static struct blkid_struct_probe* find_block_info(char *uuid, char *label, char *path)
+static struct probe_info* find_block_info(char *uuid, char *label, char *path)
 {
-	struct blkid_struct_probe *pr = NULL;
+	struct probe_info *pr = NULL;
 
 	if (uuid)
 		list_for_each_entry(pr, &devices, list)
-			if (!strcasecmp(pr->uuid, uuid))
+			if (pr->uuid && !strcasecmp(pr->uuid, uuid))
 				return pr;
 
 	if (label)
 		list_for_each_entry(pr, &devices, list)
-			if (!strcmp(pr->label, label))
+			if (pr->label && !strcmp(pr->label, label))
 				return pr;
 
 	if (path)
 		list_for_each_entry(pr, &devices, list)
-			if (!strcmp(basename(pr->dev), basename(path)))
+			if (pr->dev && !strcmp(basename(pr->dev), basename(path)))
 				return pr;
 
 	return NULL;
@@ -658,22 +645,22 @@ static char* find_mount_point(char *block)
 	return point;
 }
 
-static int print_block_info(struct blkid_struct_probe *pr)
+static int print_block_info(struct probe_info *pr)
 {
 	static char *mp;
 
 	mp = find_mount_point(pr->dev);
 	printf("%s:", pr->dev);
-	if (pr->uuid[0])
+	if (pr->uuid)
 		printf(" UUID=\"%s\"", pr->uuid);
 
-	if (pr->label[0])
+	if (pr->label)
 		printf(" LABEL=\"%s\"", pr->label);
 
-	if (pr->name[0])
+	if (pr->name)
 		printf(" NAME=\"%s\"", pr->name);
 
-	if (pr->version[0])
+	if (pr->version)
 		printf(" VERSION=\"%s\"", pr->version);
 
 	if (mp) {
@@ -681,7 +668,7 @@ static int print_block_info(struct blkid_struct_probe *pr)
 		free(mp);
 	}
 
-	printf(" TYPE=\"%s\"\n", pr->id->name);
+	printf(" TYPE=\"%s\"\n", pr->type);
 
 	return 0;
 }
@@ -698,7 +685,7 @@ static void mkdir_p(char *dir)
 	}
 }
 
-static void check_filesystem(struct blkid_struct_probe *pr)
+static void check_filesystem(struct probe_info *pr)
 {
 	pid_t pid;
 	struct stat statbuf;
@@ -707,15 +694,15 @@ static void check_filesystem(struct blkid_struct_probe *pr)
 	const char *ckfs;
 
 	/* UBIFS does not need stuff like fsck */
-	if (!strncmp(pr->id->name, "ubifs", 5))
+	if (!strncmp(pr->type, "ubifs", 5))
 		return;
 
-	if (!strncmp(pr->id->name, "vfat", 4)) {
+	if (!strncmp(pr->type, "vfat", 4)) {
 		ckfs = dosfsck;
-	} else if (!strncmp(pr->id->name, "ext", 3)) {
+	} else if (!strncmp(pr->type, "ext", 3)) {
 		ckfs = e2fsck;
 	} else {
-		ULOG_ERR("check_filesystem: %s is not supported\n", pr->id->name);
+		ULOG_ERR("check_filesystem: %s is not supported\n", pr->type);
 		return;
 	}
 
@@ -741,7 +728,7 @@ static void handle_swapfiles(bool on)
 {
 	struct stat s;
 	struct mount *m;
-	struct blkid_struct_probe *pr;
+	struct probe_info *pr;
 
 	vlist_for_each_element(&mounts, m, node)
 	{
@@ -756,7 +743,7 @@ static void handle_swapfiles(bool on)
 		if (!pr)
 			continue;
 
-		if (!strcmp(pr->id->name, "swap")) {
+		if (!strcmp(pr->type, "swap")) {
 			if (on)
 				swapon(pr->dev, m->prio);
 			else
@@ -767,7 +754,7 @@ static void handle_swapfiles(bool on)
 	}
 }
 
-static int mount_device(struct blkid_struct_probe *pr, int hotplug)
+static int mount_device(struct probe_info *pr, int hotplug)
 {
 	struct mount *m;
 	char *device;
@@ -778,7 +765,7 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 
 	device = basename(pr->dev);
 
-	if (!strcmp(pr->id->name, "swap")) {
+	if (!strcmp(pr->type, "swap")) {
 		if (hotplug && !auto_swap)
 			return -1;
 		m = find_swap(pr->uuid, pr->label, device);
@@ -816,11 +803,11 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 		if (check_fs)
 			check_filesystem(pr);
 
-		err = mount(pr->dev, target, pr->id->name, m->flags,
+		err = mount(pr->dev, target, pr->type, m->flags,
 		            (m->options) ? (m->options) : (""));
 		if (err)
 			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %s\n",
-			         pr->dev, pr->id->name, target, err, strerror(err));
+			         pr->dev, pr->type, target, err, strerror(err));
 		else
 			handle_swapfiles(true);
 		return err;
@@ -836,10 +823,10 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 		if (check_fs)
 			check_filesystem(pr);
 
-		err = mount(pr->dev, target, pr->id->name, 0, "");
+		err = mount(pr->dev, target, pr->type, 0, "");
 		if (err)
 			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %s\n",
-			         pr->dev, pr->id->name, target, err, strerror(err));
+			         pr->dev, pr->type, target, err, strerror(err));
 		else
 			handle_swapfiles(true);
 		return err;
@@ -848,7 +835,7 @@ static int mount_device(struct blkid_struct_probe *pr, int hotplug)
 	return 0;
 }
 
-static int umount_device(struct blkid_struct_probe *pr)
+static int umount_device(struct probe_info *pr)
 {
 	struct mount *m;
 	char *device = basename(pr->dev);
@@ -858,7 +845,7 @@ static int umount_device(struct blkid_struct_probe *pr)
 	if (!pr)
 		return -1;
 
-	if (!strcmp(pr->id->name, "swap"))
+	if (!strcmp(pr->type, "swap"))
 		return -1;
 
 	mp = find_mount_point(pr->dev);
@@ -1058,7 +1045,7 @@ static int test_fs_support(const char *name)
 
 static int check_extroot(char *path)
 {
-	struct blkid_struct_probe *pr = NULL;
+	struct probe_info *pr = NULL;
 	char devpath[32];
 
 #ifdef UBIFS_EXTROOT
@@ -1139,7 +1126,7 @@ static int mount_extroot(char *cfg)
 	char overlay[] = "/tmp/extroot/overlay";
 	char mnt[] = "/tmp/extroot/mnt";
 	char *path = mnt;
-	struct blkid_struct_probe *pr;
+	struct probe_info *pr;
 	struct mount *m;
 	int err = -1;
 
@@ -1164,19 +1151,19 @@ static int mount_extroot(char *cfg)
 	if (!pr && delay_root){
 		ULOG_INFO("extroot: device not present, retrying in %u seconds\n", delay_root);
 		sleep(delay_root);
-		mkblkdev();
+		make_devs();
 		cache_load(0);
 		pr = find_block_info(m->uuid, m->label, m->device);
 	}
 	if (pr) {
-		if (strncmp(pr->id->name, "ext", 3) &&
-		    strncmp(pr->id->name, "ubifs", 5)) {
-			ULOG_ERR("extroot: unsupported filesystem %s, try ext4\n", pr->id->name);
+		if (strncmp(pr->type, "ext", 3) &&
+		    strncmp(pr->type, "ubifs", 5)) {
+			ULOG_ERR("extroot: unsupported filesystem %s, try ext4\n", pr->type);
 			return -1;
 		}
 
-		if (test_fs_support(pr->id->name)) {
-			ULOG_ERR("extroot: filesystem %s not supported by kernel\n", pr->id->name);
+		if (test_fs_support(pr->type)) {
+			ULOG_ERR("extroot: filesystem %s not supported by kernel\n", pr->type);
 			return -1;
 		}
 
@@ -1187,12 +1174,12 @@ static int mount_extroot(char *cfg)
 		if (check_fs)
 			check_filesystem(pr);
 
-		err = mount(pr->dev, path, pr->id->name, m->flags,
+		err = mount(pr->dev, path, pr->type, m->flags,
 		            (m->options) ? (m->options) : (""));
 
 		if (err) {
 			ULOG_ERR("extroot: mounting %s (%s) on %s failed: %d (%s)\n",
-			         pr->dev, pr->id->name, path, err, strerror(err));
+			         pr->dev, pr->type, path, err, strerror(err));
 		} else if (m->overlay) {
 			err = check_extroot(path);
 			if (err)
@@ -1209,7 +1196,7 @@ static int mount_extroot(char *cfg)
 
 static int main_extroot(int argc, char **argv)
 {
-	struct blkid_struct_probe *pr;
+	struct probe_info *pr;
 	char blkdev_path[32] = { 0 };
 	int err = -1;
 #ifdef UBIFS_EXTROOT
@@ -1224,7 +1211,7 @@ static int main_extroot(int argc, char **argv)
 		return -1;
 	}
 
-	mkblkdev();
+	make_devs();
 	cache_load(1);
 
 	/* enable LOG_INFO messages */
@@ -1239,7 +1226,7 @@ static int main_extroot(int argc, char **argv)
 	find_block_mtd("\"rootfs_data\"", blkdev_path, sizeof(blkdev_path));
 	if (blkdev_path[0]) {
 		pr = find_block_info(NULL, NULL, blkdev_path);
-		if (pr && !strcmp(pr->id->name, "jffs2")) {
+		if (pr && !strcmp(pr->type, "jffs2")) {
 			char cfg[] = "/tmp/jffs_cfg";
 
 			/*
@@ -1285,7 +1272,7 @@ static int main_extroot(int argc, char **argv)
 
 static int main_mount(int argc, char **argv)
 {
-	struct blkid_struct_probe *pr;
+	struct probe_info *pr;
 
 	if (config_load(NULL))
 		return -1;
@@ -1301,7 +1288,7 @@ static int main_mount(int argc, char **argv)
 
 static int main_umount(int argc, char **argv)
 {
-	struct blkid_struct_probe *pr;
+	struct probe_info *pr;
 
 	if (config_load(NULL))
 		return -1;
@@ -1317,7 +1304,7 @@ static int main_umount(int argc, char **argv)
 
 static int main_detect(int argc, char **argv)
 {
-	struct blkid_struct_probe *pr;
+	struct probe_info *pr;
 
 	cache_load(0);
 	printf("config 'global'\n");
@@ -1336,7 +1323,7 @@ static int main_detect(int argc, char **argv)
 static int main_info(int argc, char **argv)
 {
 	int i;
-	struct blkid_struct_probe *pr;
+	struct probe_info *pr;
 
 	cache_load(1);
 	if (argc == 2) {
@@ -1381,7 +1368,7 @@ static int main_swapon(int argc, char **argv)
 	FILE *fp;
 	char *lineptr;
 	size_t s;
-	struct blkid_struct_probe *pr;
+	struct probe_info *pr;
 	int flags = 0;
 	int pri;
 	struct stat st;
@@ -1406,7 +1393,7 @@ static int main_swapon(int argc, char **argv)
 		case 'a':
 			cache_load(0);
 			list_for_each_entry(pr, &devices, list) {
-				if (strcmp(pr->id->name, "swap"))
+				if (strcmp(pr->type, "swap"))
 					continue;
 				if (swapon(pr->dev, 0))
 					ULOG_ERR("failed to swapon %s\n", pr->dev);

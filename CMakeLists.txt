@@ -56,7 +56,7 @@ INSTALL(TARGETS mount_root RUNTIME DESTINATION sbin)
 
 find_library(json NAMES json-c json)
 
-ADD_EXECUTABLE(block block.c)
+ADD_EXECUTABLE(block block.c probe.c)
 IF(DEFINED CMAKE_UBIFS_EXTROOT)
 	ADD_DEFINITIONS(-DUBIFS_EXTROOT)
 	TARGET_LINK_LIBRARIES(block blkid-tiny uci ubox blobmsg_json ubi-utils ${json})
