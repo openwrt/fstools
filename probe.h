@@ -28,6 +28,7 @@ struct probe_info {
 };
 
 struct probe_info * probe_path(const char *path);
+struct probe_info * probe_path_libblkid(const char *path);
 
 int make_devs(void);
 

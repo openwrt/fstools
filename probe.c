@@ -35,7 +35,7 @@ probe_path_tiny(const char *path)
 
 		if (info) {
 			info->type = strcpy(type, pr.id->name);
-			
+
 			if (pr.dev[0])
 				info->dev = strcpy(dev, pr.dev);
 
@@ -56,10 +56,17 @@ probe_path_tiny(const char *path)
 	return info;
 }
 
-struct probe_info * 
+struct probe_info *
 probe_path(const char *path)
 {
-	return probe_path_tiny(path);
+	struct probe_info *info;
+
+	info = probe_path_tiny(path);
+
+	if (!info)
+		info = probe_path_libblkid(path);
+
+	return info;
 }
 
 int
