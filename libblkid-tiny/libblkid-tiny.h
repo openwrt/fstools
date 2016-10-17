@@ -57,7 +57,6 @@ struct blkid_struct_probe
 	char	dev[32];
 	char	uuid[64];
 	char	label[64];
-	char	name[64];
 	char	version[64];
 };
 
