@@ -125,13 +125,12 @@ int blkid_probe_set_uuid_as(blkid_probe pr, unsigned char *uuid, const char *nam
 {
 	short unsigned int*u = (short unsigned int*) uuid;
 
-	if (u[0])
+	if (u[0] && (!name || !strcmp(name, "UUID"))) {
 		sprintf(pr->uuid,
 			"%04x%04x-%04x-%04x-%04x-%04x%04x%04x",
 			be16_to_cpu(u[0]), be16_to_cpu(u[1]), be16_to_cpu(u[2]), be16_to_cpu(u[3]),
 			be16_to_cpu(u[4]), be16_to_cpu(u[5]), be16_to_cpu(u[6]), be16_to_cpu(u[7]));
-	if (name)
-		strncpy(pr->name, name, sizeof(pr->name));
+	}
 
 	return 0;
 }
