@@ -55,9 +55,9 @@ probe_path_libblkid(const char *path)
 {
 	blkid_probe pr;
 	struct probe_info *info = NULL;
-	size_t type_len, uuid_len, label_len, name_len, version_len;
-	char *dev_ptr, *type_ptr, *uuid_ptr, *label_ptr, *name_ptr, *version_ptr;
-	const char *type_val, *uuid_val, *label_val, *name_val, *version_val;
+	size_t type_len, uuid_len, label_len, version_len;
+	char *dev_ptr, *type_ptr, *uuid_ptr, *label_ptr, *version_ptr;
+	const char *type_val, *uuid_val, *label_val, *version_val;
 
 	if (!load_libblkid())
 		return NULL;
@@ -77,9 +77,6 @@ probe_path_libblkid(const char *path)
 		if (libblkid.lookup(pr, "LABEL", &label_val, &label_len))
 			label_len = 0;
 
-		if (libblkid.lookup(pr, "NAME", &name_val, &name_len))
-			name_len = 0;
-
 		if (libblkid.lookup(pr, "VERSION", &version_val, &version_len))
 			version_len = 0;
 
@@ -89,7 +86,6 @@ probe_path_libblkid(const char *path)
 			                &type_ptr,    type_len,
 			                &uuid_ptr,    uuid_len,
 			                &label_ptr,   label_len,
-			                &name_ptr,    name_len,
 			                &version_ptr, version_len);
 
 			if (info) {
@@ -101,9 +97,6 @@ probe_path_libblkid(const char *path)
 
 				if (label_len)
 					info->label = strcpy(label_ptr, label_val);
-
-				if (name_len)
-					info->name = strcpy(name_ptr, name_val);
 
 				if (version_len)
 					info->version = strcpy(version_ptr, version_val);

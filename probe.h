@@ -23,7 +23,6 @@ struct probe_info {
 	char *dev;
 	char *uuid;
 	char *label;
-	char *name;
 	char *version;
 };
 

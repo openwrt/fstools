@@ -22,7 +22,7 @@ probe_path_tiny(const char *path)
 {
 	struct probe_info *info = NULL;
 	struct blkid_struct_probe pr = { };
-	char *type, *dev, *uuid, *label, *name, *version;
+	char *type, *dev, *uuid, *label, *version;
 
 	if (probe_block((char *)path, &pr) == 0 && pr.id && !pr.err) {
 		info = calloc_a(sizeof(*info),
@@ -30,7 +30,6 @@ probe_path_tiny(const char *path)
 		                &dev,     strlen(pr.dev)      + 1,
 		                &uuid,    strlen(pr.uuid)     + 1,
 		                &label,   strlen(pr.label)    + 1,
-		                &name,    strlen(pr.name)     + 1,
 		                &version, strlen(pr.version)  + 1);
 
 		if (info) {
@@ -44,9 +43,6 @@ probe_path_tiny(const char *path)
 
 			if (pr.label[0])
 				info->label = strcpy(label, pr.label);
-
-			if (pr.name[0])
-				info->name = strcpy(name, pr.name);
 
 			if (pr.version[0])
 				info->version = strcpy(version, pr.version);
