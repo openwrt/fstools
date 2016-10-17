@@ -657,9 +657,6 @@ static int print_block_info(struct probe_info *pr)
 	if (pr->label)
 		printf(" LABEL=\"%s\"", pr->label);
 
-	if (pr->name)
-		printf(" NAME=\"%s\"", pr->name);
-
 	if (pr->version)
 		printf(" VERSION=\"%s\"", pr->version);
 
