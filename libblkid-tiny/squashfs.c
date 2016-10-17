@@ -53,12 +53,12 @@ static int probe_squashfs(blkid_probe pr, const struct blkid_idmag *mag)
 	if (strcmp(mag->magic, "sqsh") == 0 ||
 	    strcmp(mag->magic, "qshs") == 0)
 		blkid_probe_sprintf_version(pr, "%u.%u",
-				sq->s_major,
-				sq->s_minor);
+				be16_to_cpu(sq->s_major),
+				be16_to_cpu(sq->s_minor));
 	else
 		blkid_probe_sprintf_version(pr, "%u.%u",
-				swab16(sq->s_major),
-				swab16(sq->s_minor));
+				le16_to_cpu(sq->s_major),
+				le16_to_cpu(sq->s_minor));
 	md5_begin(&ctx);
 	md5_hash(sq, sizeof(*sq), &ctx);
 	md5_end(&md5, &ctx);
@@ -74,12 +74,12 @@ const struct blkid_idinfo squashfs_idinfo =
 	.probefunc	= probe_squashfs,
 	.magics		=
 	{
-		{ .magic = "sqsh", .len = 4 },
-		{ .magic = "hsqs", .len = 4 }, /* swap */
+		{ .magic = "sqsh", .len = 4 }, /* BE legacy squashfs */
+		{ .magic = "hsqs", .len = 4 }, /* LE / v4 squashfs */
 
 		/* LZMA version */
-		{ .magic = "qshs", .len = 4 },
-		{ .magic = "shsq", .len = 4 }, /* swap */
+		{ .magic = "qshs", .len = 4 }, /* BE legacy squashfs with LZMA */
+		{ .magic = "shsq", .len = 4 }, /* LE / v4 squashfs with LZMA */
 		{ NULL }
 	}
 };
