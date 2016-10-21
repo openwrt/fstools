@@ -22,6 +22,7 @@
 #include <dirent.h>
 #include <stdarg.h>
 #include <string.h>
+#include <errno.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -804,7 +805,7 @@ static int mount_device(struct probe_info *pr, int hotplug)
 		            (m->options) ? (m->options) : (""));
 		if (err)
 			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %s\n",
-			         pr->dev, pr->type, target, err, strerror(err));
+			         pr->dev, pr->type, target, errno, strerror(errno));
 		else
 			handle_swapfiles(true);
 		return err;
@@ -823,7 +824,7 @@ static int mount_device(struct probe_info *pr, int hotplug)
 		err = mount(pr->dev, target, pr->type, 0, "");
 		if (err)
 			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %s\n",
-			         pr->dev, pr->type, target, err, strerror(err));
+			         pr->dev, pr->type, target, errno, strerror(errno));
 		else
 			handle_swapfiles(true);
 		return err;
@@ -856,7 +857,7 @@ static int umount_device(struct probe_info *pr)
 	err = umount2(mp, MNT_DETACH);
 	if (err)
 		ULOG_ERR("unmounting %s (%s)  failed (%d) - %s\n",
-		         pr->dev, mp, err, strerror(err));
+		         pr->dev, mp, errno, strerror(errno));
 	else
 		ULOG_INFO("unmounted %s (%s)\n",
 		          pr->dev, mp);
@@ -885,7 +886,7 @@ static int main_hotplug(int argc, char **argv)
 
 		if (err)
 			ULOG_ERR("umount of %s failed (%d) - %s\n",
-			         mount_point, err, strerror(err));
+			         mount_point, errno, strerror(errno));
 
 		free(mount_point);
 		return 0;
@@ -1176,7 +1177,7 @@ static int mount_extroot(char *cfg)
 
 		if (err) {
 			ULOG_ERR("extroot: mounting %s (%s) on %s failed: %d (%s)\n",
-			         pr->dev, pr->type, path, err, strerror(err));
+			         pr->dev, pr->type, path, errno, strerror(errno));
 		} else if (m->overlay) {
 			err = check_extroot(path);
 			if (err)
