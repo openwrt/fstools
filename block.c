@@ -23,6 +23,8 @@
 #include <stdarg.h>
 #include <string.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -752,6 +754,143 @@ static void handle_swapfiles(bool on)
 	}
 }
 
+static void to_devnull(int fd)
+{
+	int devnull = open("/dev/null", fd ? O_WRONLY : O_RDONLY);
+
+	if (devnull >= 0)
+		dup2(devnull, fd);
+
+	if (devnull > STDERR_FILENO)
+		close(devnull);
+}
+
+static int exec_mount(const char *source, const char *target,
+                      const char *fstype, const char *options)
+{
+	pid_t pid;
+	struct stat s;
+	FILE *mount_fd;
+	int err, status, pfds[2];
+	char errmsg[128], cmd[sizeof("/sbin/mount.XXXXXXXXXXXXXXXX\0")];
+
+	snprintf(cmd, sizeof(cmd), "/sbin/mount.%s", fstype);
+
+	if (stat(cmd, &s) < 0 || !S_ISREG(s.st_mode) || !(s.st_mode & S_IXUSR)) {
+		ULOG_ERR("No \"mount.%s\" utility available\n", fstype);
+		return -1;
+	}
+
+	if (pipe(pfds) < 0)
+		return -1;
+
+	fcntl(pfds[0], F_SETFD, fcntl(pfds[0], F_GETFD) | FD_CLOEXEC);
+	fcntl(pfds[1], F_SETFD, fcntl(pfds[1], F_GETFD) | FD_CLOEXEC);
+
+	pid = vfork();
+
+	switch (pid) {
+	case -1:
+		close(pfds[0]);
+		close(pfds[1]);
+
+		return -1;
+
+	case 0:
+		to_devnull(STDIN_FILENO);
+		to_devnull(STDOUT_FILENO);
+
+		dup2(pfds[1], STDERR_FILENO);
+		close(pfds[0]);
+		close(pfds[1]);
+
+		if (options && *options)
+			execl(cmd, cmd, "-o", options, source, target, NULL);
+		else
+			execl(cmd, cmd, source, target, NULL);
+
+		return -1;
+
+	default:
+		close(pfds[1]);
+
+		mount_fd = fdopen(pfds[0], "r");
+
+		while (fgets(errmsg, sizeof(errmsg), mount_fd))
+			ULOG_ERR("mount.%s: %s", fstype, errmsg);
+
+		fclose(mount_fd);
+
+		err = waitpid(pid, &status, 0);
+
+		if (err != -1) {
+			if (status != 0) {
+				ULOG_ERR("mount.%s: failed with status %d\n", fstype, status);
+				errno = EINVAL;
+				err = -1;
+			} else {
+				errno = 0;
+				err = 0;
+			}
+		}
+
+		break;
+	}
+
+	return err;
+}
+
+static int handle_mount(const char *source, const char *target,
+                        const char *fstype, struct mount *m)
+{
+	int i, err;
+	size_t mount_opts_len;
+	char *mount_opts = NULL, *ptr;
+
+	err = mount(source, target, fstype, m ? m->flags : 0,
+	            (m && m->options) ? m->options : "");
+
+	/* Requested file system type is not available in kernel,
+	   attempt to call mount helper. */
+	if (err == -1 && errno == ENODEV) {
+		if (m) {
+			/* Convert mount flags back into string representation,
+			   first calculate needed length of string buffer... */
+			mount_opts_len = 1 + (m->options ? strlen(m->options) : 0);
+
+			for (i = 0; i < ARRAY_SIZE(mount_flags); i++)
+				if ((mount_flags[i].flag > 0) &&
+				    (mount_flags[i].flag < INT_MAX) &&
+				    (m->flags & (uint32_t)mount_flags[i].flag))
+					mount_opts_len += strlen(mount_flags[i].name) + 1;
+
+			/* ... then now allocate and fill it ... */
+			ptr = mount_opts = calloc(1, mount_opts_len);
+
+			if (!ptr) {
+				errno = ENOMEM;
+				return -1;
+			}
+
+			if (m->options)
+				ptr += sprintf(ptr, "%s,", m->options);
+
+			for (i = 0; i < ARRAY_SIZE(mount_flags); i++)
+				if ((mount_flags[i].flag > 0) &&
+				    (mount_flags[i].flag < INT_MAX) &&
+				    (m->flags & (uint32_t)mount_flags[i].flag))
+					ptr += sprintf(ptr, "%s,", mount_flags[i].name);
+
+			mount_opts[mount_opts_len - 1] = 0;
+		}
+
+		/* ... and now finally invoke the external mount program */
+		err = exec_mount(source, target, fstype, mount_opts);
+	}
+
+	return err;
+}
+
 static int mount_device(struct probe_info *pr, int hotplug)
 {
 	struct mount *m;
@@ -801,8 +940,7 @@ static int mount_device(struct probe_info *pr, int hotplug)
 		if (check_fs)
 			check_filesystem(pr);
 
-		err = mount(pr->dev, target, pr->type, m->flags,
-		            (m->options) ? (m->options) : (""));
+		err = handle_mount(pr->dev, target, pr->type, m);
 		if (err)
 			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %s\n",
 			         pr->dev, pr->type, target, errno, strerror(errno));
@@ -821,7 +959,7 @@ static int mount_device(struct probe_info *pr, int hotplug)
 		if (check_fs)
 			check_filesystem(pr);
 
-		err = mount(pr->dev, target, pr->type, 0, "");
+		err = handle_mount(pr->dev, target, pr->type, NULL);
 		if (err)
 			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %s\n",
 			         pr->dev, pr->type, target, errno, strerror(errno));
