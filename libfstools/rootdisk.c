@@ -162,6 +162,7 @@ static int rootdisk_volume_identify(struct volume *v)
 	struct rootdev_volume *p = container_of(v, struct rootdev_volume, v);
 	int ret = FS_NONE;
 	uint32_t magic = 0;
+	size_t n;
 	FILE *f;
 
 	f = fopen(rootdev, "r");
@@ -169,14 +170,18 @@ static int rootdisk_volume_identify(struct volume *v)
 		return ret;
 
 	fseeko(f, p->offset + 0x400, SEEK_SET);
-	fread(&magic, sizeof(magic), 1, f);
+	n = fread(&magic, sizeof(magic), 1, f);
+	if (n != 1)
+		return -1;
 
 	if (magic == cpu_to_le32(0xF2F52010))
 		ret = FS_F2FS;
 
 	magic = 0;
 	fseeko(f, p->offset + 0x438, SEEK_SET);
-	fread(&magic, sizeof(magic), 1, f);
+	n = fread(&magic, sizeof(magic), 1, f);
+	if (n != 1)
+		return -1;
 	if ((le32_to_cpu(magic) & 0xffff) == 0xef53)
 		ret = FS_EXT4;
 
@@ -251,6 +256,7 @@ static int rootdisk_volume_init(struct volume *v)
 {
 	struct rootdev_volume *p = container_of(v, struct rootdev_volume, v);
 	char str[128];
+	int ret = 0;
 
 	if (!p->loop_name[0] && rootdisk_create_loop(p) != 0)
 		return -1;
@@ -265,12 +271,12 @@ static int rootdisk_volume_init(struct volume *v)
 			snprintf(str, sizeof(str), "mkfs.f2fs -l rootfs_data %s", v->blk);
 		else
 			snprintf(str, sizeof(str), "mkfs.ext4 -L rootfs_data %s", v->blk);
-		system(str);
+		ret = system(str);
 		break;
 	default:
 		break;
 	}
-	return 0;
+	return ret;
 }
 
 static struct driver rootdisk_driver = {
