@@ -31,6 +31,7 @@
 #include <sys/swap.h>
 #include <sys/mount.h>
 #include <sys/wait.h>
+#include <sys/sysmacros.h>
 
 #include <linux/fs.h>
 

@@ -22,6 +22,7 @@
 
 #define PROGRAM_NAME "libubi"
 
+#include <sys/sysmacros.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
