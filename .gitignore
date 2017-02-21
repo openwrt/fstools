@@ -3,6 +3,7 @@ mount_root
 snapshot_tool
 ubi
 block
+blockd
 fs-state
 *.so
 *.a

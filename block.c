@@ -43,8 +43,11 @@
 #include <libubox/vlist.h>
 #include <libubox/blobmsg_json.h>
 #include <libubox/avl-cmp.h>
+#include <libubus.h>
 
 #include "probe.h"
+
+#define AUTOFS_MOUNT_PATH       "/tmp/run/blockd/"
 
 #ifdef UBIFS_EXTROOT
 #include "libubi/libubi.h"
@@ -53,6 +56,12 @@
 enum {
 	TYPE_MOUNT,
 	TYPE_SWAP,
+};
+
+enum {
+	TYPE_DEV,
+	TYPE_HOTPLUG,
+	TYPE_AUTOFS,
 };
 
 struct mount {
@@ -67,6 +76,7 @@ struct mount {
 	char *label;
 	char *device;
 	int extroot;
+	int autofs;
 	int overlay;
 	int disabled_fsck;
 	unsigned int prio;
@@ -104,6 +114,7 @@ enum {
 	MOUNT_TARGET,
 	MOUNT_DEVICE,
 	MOUNT_OPTIONS,
+	MOUNT_AUTOFS,
 	__MOUNT_MAX
 };
 
@@ -119,6 +130,7 @@ static const struct blobmsg_policy mount_policy[__MOUNT_MAX] = {
 	[MOUNT_TARGET] = { .name = "target", .type = BLOBMSG_TYPE_STRING },
 	[MOUNT_OPTIONS] = { .name = "options", .type = BLOBMSG_TYPE_STRING },
 	[MOUNT_ENABLE] = { .name = "enabled", .type = BLOBMSG_TYPE_INT32 },
+	[MOUNT_AUTOFS] = { .name = "autofs", .type = BLOBMSG_TYPE_INT32 },
 };
 
 static const struct uci_blob_param_list mount_attr_list = {
@@ -247,7 +259,7 @@ static int mount_add(struct uci_section *s)
 	struct blob_attr *tb[__MOUNT_MAX] = { 0 };
 	struct mount *m;
 
-        blob_buf_init(&b, 0);
+	blob_buf_init(&b, 0);
 	uci_to_blob(&b, s, &mount_attr_list);
 	blobmsg_parse(mount_policy, __MOUNT_MAX, tb, blob_data(b.head), blob_len(b.head));
 
@@ -263,7 +275,10 @@ static int mount_add(struct uci_section *s)
 	m->label = blobmsg_get_strdup(tb[MOUNT_LABEL]);
 	m->target = blobmsg_get_strdup(tb[MOUNT_TARGET]);
 	m->device = blobmsg_get_basename(tb[MOUNT_DEVICE]);
-
+	if (tb[MOUNT_AUTOFS])
+		m->autofs = blobmsg_get_u32(tb[MOUNT_AUTOFS]);
+	else
+		m->autofs = 0;
 	parse_mount_options(m, blobmsg_get_strdup(tb[MOUNT_OPTIONS]));
 
 	m->overlay = m->extroot = 0;
@@ -900,7 +915,65 @@ static int handle_mount(const char *source, const char *target,
 	return err;
 }
 
-static int mount_device(struct probe_info *pr, int hotplug)
+static void blockd_notify(char *device, struct mount *m, struct probe_info *pr)
+{
+	struct ubus_context *ctx = ubus_connect(NULL);
+	uint32_t id;
+
+	if (!ctx)
+		return;
+
+	if (!ubus_lookup_id(ctx, "block", &id)) {
+		struct blob_buf buf = { 0 };
+		char *d = strrchr(device, '/');
+
+		if (d)
+			d++;
+		else
+			d = device;
+
+		blob_buf_init(&buf, 0);
+
+		if (m) {
+
+			blobmsg_add_string(&buf, "device", d);
+			if (m->uuid)
+				blobmsg_add_string(&buf, "uuid", m->uuid);
+			if (m->label)
+				blobmsg_add_string(&buf, "label", m->label);
+			if (m->target)
+				blobmsg_add_string(&buf, "target", m->target);
+			if (m->options)
+				blobmsg_add_string(&buf, "options", m->options);
+			if (m->autofs)
+				blobmsg_add_u32(&buf, "autofs", m->autofs);
+			if (pr->type)
+				blobmsg_add_string(&buf, "type", pr->type);
+			if (pr->version)
+				blobmsg_add_string(&buf, "version", pr->version);
+		} else if (pr) {
+			blobmsg_add_string(&buf, "device", d);
+			if (pr->uuid)
+				blobmsg_add_string(&buf, "uuid", pr->uuid);
+			if (pr->label)
+				blobmsg_add_string(&buf, "label", pr->label);
+			if (pr->type)
+				blobmsg_add_string(&buf, "type", pr->type);
+			if (pr->version)
+				blobmsg_add_string(&buf, "version", pr->version);
+			blobmsg_add_u32(&buf, "anon", 1);
+		} else {
+			blobmsg_add_string(&buf, "device", d);
+			blobmsg_add_u32(&buf, "remove", 1);
+		}
+
+		ubus_invoke(ctx, id, "hotplug", buf.head, NULL, NULL, 3000);
+	}
+
+	ubus_free(ctx);
+}
+
+static int mount_device(struct probe_info *pr, int type)
 {
 	struct mount *m;
 	char *device;
@@ -912,7 +985,7 @@ static int mount_device(struct probe_info *pr, int hotplug)
 	device = basename(pr->dev);
 
 	if (!strcmp(pr->type, "swap")) {
-		if (hotplug && !auto_swap)
+		if ((type == TYPE_HOTPLUG) && !auto_swap)
 			return -1;
 		m = find_swap(pr->uuid, pr->label, device);
 		if (m || anon_swap)
@@ -921,11 +994,8 @@ static int mount_device(struct probe_info *pr, int hotplug)
 		return 0;
 	}
 
-	if (hotplug && !auto_mount)
-		return -1;
-
 	mp = find_mount_point(pr->dev);
-	if (mp) {
+	if (mp && (type != TYPE_HOTPLUG)) {
 		ULOG_ERR("%s is already mounted on %s\n", pr->dev, mp);
 		free(mp);
 		return -1;
@@ -935,11 +1005,35 @@ static int mount_device(struct probe_info *pr, int hotplug)
 	if (m && m->extroot)
 		return -1;
 
+	if (m) switch (type) {
+	case TYPE_HOTPLUG:
+		blockd_notify(device, m, pr);
+		if (m->autofs)
+			return 0;
+		if (!auto_mount)
+			return -1;
+		break;
+	case TYPE_AUTOFS:
+		if (!m->autofs)
+			return -1;
+		break;
+	case TYPE_DEV:
+		if (m->autofs)
+			return -1;
+		break;
+	} else if (type == TYPE_HOTPLUG) {
+		blockd_notify(device, NULL, pr);
+	}
+
 	if (m) {
 		char *target = m->target;
 		char _target[32];
 		int err = 0;
 
+		if (m->autofs) {
+			snprintf(_target, sizeof(_target), "/tmp/run/blockd/%s", device);
+			target = _target;
+		}
 		if (!target) {
 			snprintf(_target, sizeof(_target), "/mnt/%s", device);
 			target = _target;
@@ -1013,13 +1107,10 @@ static int umount_device(struct probe_info *pr)
 	return err;
 }
 
-static int main_hotplug(int argc, char **argv)
+static int mount_action(char *action, char *device, int type)
 {
 	char path[32];
-	char *action, *device, *mount_point;
-
-	action = getenv("ACTION");
-	device = getenv("DEVNAME");
+	char *mount_point;
 
 	if (!action || !device)
 		return -1;
@@ -1027,6 +1118,10 @@ static int main_hotplug(int argc, char **argv)
 
 	if (!strcmp(action, "remove")) {
 		int err = 0;
+
+		if (type == TYPE_HOTPLUG)
+			blockd_notify(device, NULL, NULL);
+
 		mount_point = find_mount_point(path);
 		if (mount_point)
 			err = umount2(mount_point, MNT_DETACH);
@@ -1047,7 +1142,37 @@ static int main_hotplug(int argc, char **argv)
 		return -1;
 	cache_load(0);
 
-	return mount_device(find_block_info(NULL, NULL, path), 1);
+	return mount_device(find_block_info(NULL, NULL, path), type);
+}
+
+static int main_hotplug(int argc, char **argv)
+{
+	return mount_action(getenv("ACTION"), getenv("DEVNAME"), TYPE_HOTPLUG);
+}
+
+static int main_autofs(int argc, char **argv)
+{
+	if (argc < 3)
+		return -1;
+
+	if (!strcmp(argv[2], "start")) {
+		struct probe_info *pr;
+
+		if (config_load(NULL))
+			return -1;
+
+		cache_load(0);
+		list_for_each_entry(pr, &devices, list) {
+			struct mount *m = find_block(pr->uuid, pr->label, NULL, NULL);
+
+			if (m && m->autofs)
+				mount_device(pr, TYPE_HOTPLUG);
+			else
+				blockd_notify(pr->dev, m, pr);
+		}
+		return 0;
+	}
+	return mount_action(argv[2], argv[3], TYPE_AUTOFS);
 }
 
 static int find_block_mtd(char *name, char *part, int plen)
@@ -1425,7 +1550,7 @@ static int main_mount(int argc, char **argv)
 
 	cache_load(1);
 	list_for_each_entry(pr, &devices, list)
-		mount_device(pr, 0);
+		mount_device(pr, TYPE_DEV);
 
 	handle_swapfiles(true);
 
@@ -1644,6 +1769,9 @@ int main(int argc, char **argv)
 
 		if (!strcmp(argv[1], "hotplug"))
 			return main_hotplug(argc, argv);
+
+		if (!strcmp(argv[1], "autofs"))
+			return main_autofs(argc, argv);
 
 		if (!strcmp(argv[1], "extroot"))
 			return main_extroot(argc, argv);
