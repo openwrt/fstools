@@ -25,6 +25,12 @@
 /* this is a raw syscall - man 2 pivot_root */
 extern int pivot_root(const char *new_root, const char *put_old);
 
+/**
+ * mount_move - move mounted point to the new location
+ *
+ * @oldroot: directory that is current location of mount point
+ * @newroot: new directory for the mount point
+ */
 int
 mount_move(char *oldroot, char *newroot, char *dir)
 {
@@ -79,6 +85,12 @@ pivot(char *new, char *old)
 	return 0;
 }
 
+/**
+ * fopivot - switch to overlay using passed dir as upper one
+ *
+ * @rw_root: writable directory that will be used as upper dir
+ * @ro_root: directory where old root will be put
+ */
 int
 fopivot(char *rw_root, char *ro_root)
 {
@@ -134,6 +146,9 @@ fopivot(char *rw_root, char *ro_root)
 	return pivot("/mnt", ro_root);
 }
 
+/**
+ * ramoverlay - use RAM to store filesystem changes on top of RO root
+ */
 int
 ramoverlay(void)
 {
