@@ -54,11 +54,11 @@ ADD_EXECUTABLE(mount_root mount_root.c)
 TARGET_LINK_LIBRARIES(mount_root fstools)
 INSTALL(TARGETS mount_root RUNTIME DESTINATION sbin)
 
-ADD_EXECUTABLE(blockd blockd.c)
-TARGET_LINK_LIBRARIES(blockd fstools ubus blobmsg_json)
-INSTALL(TARGETS blockd RUNTIME DESTINATION sbin)
-
 find_library(json NAMES json-c json)
+
+ADD_EXECUTABLE(blockd blockd.c)
+TARGET_LINK_LIBRARIES(blockd fstools ubus blobmsg_json ${json})
+INSTALL(TARGETS blockd RUNTIME DESTINATION sbin)
 
 ADD_EXECUTABLE(block block.c probe.c probe-libblkid.c)
 IF(DEFINED CMAKE_UBIFS_EXTROOT)
