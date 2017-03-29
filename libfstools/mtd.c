@@ -76,8 +76,10 @@ static int mtd_volume_load(struct mtd_volume *p)
 	struct mtd_info_user mtdInfo;
 	struct erase_info_user mtdLockInfo;
 
-	if (p->fd)
+	if (p->fd) {
+		lseek(p->fd, 0, SEEK_SET);
 		return 0;
+	}
 
 	if (!p->chr)
 		return -1;
