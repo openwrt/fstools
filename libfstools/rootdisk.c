@@ -268,9 +268,9 @@ static int rootdisk_volume_init(struct volume *v)
 	case FS_NONE:
 		ULOG_INFO("rootdisk overlay filesystem has not been formatted yet\n");
 		if (rootdisk_use_f2fs(p))
-			snprintf(str, sizeof(str), "mkfs.f2fs -l rootfs_data %s", v->blk);
+			snprintf(str, sizeof(str), "mkfs.f2fs -q -l rootfs_data %s", v->blk);
 		else
-			snprintf(str, sizeof(str), "mkfs.ext4 -L rootfs_data %s", v->blk);
+			snprintf(str, sizeof(str), "mkfs.ext4 -q -L rootfs_data %s", v->blk);
 		ret = system(str);
 		break;
 	default:
