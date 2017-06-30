@@ -46,7 +46,6 @@ find_mount(char *mp)
 {
 	FILE *fp = fopen("/proc/mounts", "r");
 	static char line[256];
-	char *point = NULL;
 
 	if(!fp)
 		return NULL;
@@ -75,7 +74,7 @@ find_mount(char *mp)
 
 	fclose(fp);
 
-	return point;
+	return NULL;
 }
 
 /*
@@ -184,7 +183,7 @@ find_mount_point(char *block, int root_only)
 		devname = tmp;
 
 		/* if device name matches */
-		if (!strncmp(block, devname, len)) {
+		if (!strncmp(block, devname, len + 1)) {
 			if (root_only && fs_rootfs_only(fstype))
 				break;
 
