@@ -83,7 +83,7 @@ static int jffs2_mark(struct volume *v)
 	close(fd);
 
 	if (sz != 4) {
-		ULOG_ERR("writing %s failed: %s\n", v->blk, strerror(errno));
+		ULOG_ERR("writing %s failed: %m\n", v->blk);
 		return -1;
 	}
 

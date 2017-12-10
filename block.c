@@ -1052,8 +1052,8 @@ static int mount_device(struct probe_info *pr, int type)
 
 		err = handle_mount(pr->dev, target, pr->type, m);
 		if (err)
-			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %s\n",
-			         pr->dev, pr->type, target, errno, strerror(errno));
+			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
+			         pr->dev, pr->type, target, errno);
 		else
 			handle_swapfiles(true);
 		return err;
@@ -1071,8 +1071,8 @@ static int mount_device(struct probe_info *pr, int type)
 
 		err = handle_mount(pr->dev, target, pr->type, NULL);
 		if (err)
-			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %s\n",
-			         pr->dev, pr->type, target, errno, strerror(errno));
+			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
+			         pr->dev, pr->type, target, errno);
 		else
 			handle_swapfiles(true);
 		return err;
@@ -1104,8 +1104,8 @@ static int umount_device(struct probe_info *pr)
 
 	err = umount2(mp, MNT_DETACH);
 	if (err)
-		ULOG_ERR("unmounting %s (%s)  failed (%d) - %s\n",
-		         pr->dev, mp, errno, strerror(errno));
+		ULOG_ERR("unmounting %s (%s)  failed (%d) - %m\n",
+		         pr->dev, mp, errno);
 	else
 		ULOG_INFO("unmounted %s (%s)\n",
 		          pr->dev, mp);
@@ -1134,8 +1134,8 @@ static int mount_action(char *action, char *device, int type)
 			err = umount2(mount_point, MNT_DETACH);
 
 		if (err)
-			ULOG_ERR("umount of %s failed (%d) - %s\n",
-			         mount_point, errno, strerror(errno));
+			ULOG_ERR("umount of %s failed (%d) - %m\n",
+			         mount_point, errno);
 
 		free(mount_point);
 		return 0;
@@ -1360,8 +1360,8 @@ static int check_extroot(char *path)
 			if (stat(tag, &s)) {
 				fp = fopen(tag, "w+");
 				if (!fp) {
-					ULOG_ERR("extroot: failed to write UUID to %s: %d (%s)\n",
-					         tag, errno, strerror(errno));
+					ULOG_ERR("extroot: failed to write UUID to %s: %d (%m)\n",
+					         tag, errno);
 					/* return 0 to continue boot regardless of error */
 					return 0;
 				}
@@ -1372,14 +1372,14 @@ static int check_extroot(char *path)
 
 			fp = fopen(tag, "r");
 			if (!fp) {
-				ULOG_ERR("extroot: failed to read UUID from %s: %d (%s)\n",
-				         tag, errno, strerror(errno));
+				ULOG_ERR("extroot: failed to read UUID from %s: %d (%m)\n",
+				         tag, errno);
 				return -1;
 			}
 
 			if (!fgets(uuid, sizeof(uuid), fp))
-				ULOG_ERR("extroot: failed to read UUID from %s: %d (%s)\n",
-				         tag, errno, strerror(errno));
+				ULOG_ERR("extroot: failed to read UUID from %s: %d (%m)\n",
+				         tag, errno);
 			fclose(fp);
 
 			if (*uuid && !strcasecmp(uuid, pr->uuid))
@@ -1457,8 +1457,8 @@ static int mount_extroot(char *cfg)
 		            (m->options) ? (m->options) : (""));
 
 		if (err) {
-			ULOG_ERR("extroot: mounting %s (%s) on %s failed: %d (%s)\n",
-			         pr->dev, pr->type, path, errno, strerror(errno));
+			ULOG_ERR("extroot: mounting %s (%s) on %s failed: %d (%m)\n",
+			         pr->dev, pr->type, path, errno);
 		} else if (m->overlay) {
 			err = check_extroot(path);
 			if (err)

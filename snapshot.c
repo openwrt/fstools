@@ -136,7 +136,7 @@ snapshot_mark(int argc, char **argv)
 	close(fd);
 
 	if (sz != 1) {
-		ULOG_ERR("writing %s failed: %s\n", v->blk, strerror(errno));
+		ULOG_ERR("writing %s failed: %m\n", v->blk);
 		return -1;
 	}
 

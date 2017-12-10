@@ -198,7 +198,7 @@ static int mtd_volume_identify(struct volume *v)
 	sz = read(p->fd, &deadc0de, sizeof(deadc0de));
 
 	if (sz != sizeof(deadc0de)) {
-		ULOG_ERR("reading %s failed: %s\n", v->name, strerror(errno));
+		ULOG_ERR("reading %s failed: %m\n", v->name);
 		return -1;
 	}
 
@@ -275,7 +275,7 @@ static int mtd_volume_init(struct volume *v)
 
 	ret = ioctl(p->fd, MEMGETINFO, &mtdinfo);
 	if (ret) {
-		ULOG_ERR("ioctl(%d, MEMGETINFO) failed: %s\n", p->fd, strerror(errno));
+		ULOG_ERR("ioctl(%d, MEMGETINFO) failed: %m\n", p->fd);
 	} else {
 		struct erase_info_user mtdlock;
 

@@ -102,12 +102,12 @@ static int
 overlay_mount(struct volume *v, char *fs)
 {
 	if (mkdir("/tmp/overlay", 0755)) {
-		ULOG_ERR("failed to mkdir /tmp/overlay: %s\n", strerror(errno));
+		ULOG_ERR("failed to mkdir /tmp/overlay: %m\n");
 		return -1;
 	}
 
 	if (mount(v->blk, "/tmp/overlay", fs, MS_NOATIME, NULL)) {
-		ULOG_ERR("failed to mount -t %s %s /tmp/overlay: %s\n", fs, v->blk, strerror(errno));
+		ULOG_ERR("failed to mount -t %s %s /tmp/overlay: %m\n", fs, v->blk);
 		return -1;
 	}
 
@@ -129,27 +129,27 @@ switch2jffs(struct volume *v)
 	ret = mount(v->blk, "/rom/overlay", "jffs2", MS_NOATIME, NULL);
 	unlink("/tmp/.switch_jffs2");
 	if (ret) {
-		ULOG_ERR("failed - mount -t jffs2 %s /rom/overlay: %s\n", v->blk, strerror(errno));
+		ULOG_ERR("failed - mount -t jffs2 %s /rom/overlay: %m\n", v->blk);
 		return -1;
 	}
 
 	if (mount("none", "/", NULL, MS_NOATIME | MS_REMOUNT, 0)) {
-		ULOG_ERR("failed - mount -o remount,ro none: %s\n", strerror(errno));
+		ULOG_ERR("failed - mount -o remount,ro none: %m\n");
 		return -1;
 	}
 
 	if (system("cp -a /tmp/root/* /rom/overlay")) {
-		ULOG_ERR("failed - cp -a /tmp/root/* /rom/overlay: %s\n", strerror(errno));
+		ULOG_ERR("failed - cp -a /tmp/root/* /rom/overlay: %m\n");
 		return -1;
 	}
 
 	if (pivot("/rom", "/mnt")) {
-		ULOG_ERR("failed - pivot /rom /mnt: %s\n", strerror(errno));
+		ULOG_ERR("failed - pivot /rom /mnt: %m\n");
 		return -1;
 	}
 
 	if (mount_move("/mnt", "/tmp/root", "")) {
-		ULOG_ERR("failed - mount -o move /mnt /tmp/root %s\n", strerror(errno));
+		ULOG_ERR("failed - mount -o move /mnt /tmp/root %m\n");
 		return -1;
 	}
 
@@ -267,13 +267,13 @@ static int overlay_mount_fs(struct volume *v)
 	char *fstype = overlay_fs_name(volume_identify(v));
 
 	if (mkdir("/tmp/overlay", 0755)) {
-		ULOG_ERR("failed to mkdir /tmp/overlay: %s\n", strerror(errno));
+		ULOG_ERR("failed to mkdir /tmp/overlay: %m\n");
 		return -1;
 	}
 
 	if (mount(v->blk, "/tmp/overlay", fstype, MS_NOATIME, NULL)) {
-		ULOG_ERR("failed to mount -t %s %s /tmp/overlay: %s\n",
-		         fstype, v->blk, strerror(errno));
+		ULOG_ERR("failed to mount -t %s %s /tmp/overlay: %m\n",
+		         fstype, v->blk);
 		return -1;
 	}
 

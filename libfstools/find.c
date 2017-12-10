@@ -223,7 +223,7 @@ find_filesystem(char *fs)
 	int ret = -1;
 
 	if (!fp) {
-		ULOG_ERR("opening /proc/filesystems failed: %s\n", strerror(errno));
+		ULOG_ERR("opening /proc/filesystems failed: %m\n");
 		goto out;
 	}
 

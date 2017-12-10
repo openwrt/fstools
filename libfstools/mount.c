@@ -54,7 +54,7 @@ mount_move(char *oldroot, char *newroot, char *dir)
 	ret = mount(olddir, newdir, NULL, MS_NOATIME | MS_MOVE, NULL);
 
 /*	if (ret)
-		ULOG_ERR("failed %s %s: %s\n", olddir, newdir, strerror(errno));*/
+		ULOG_ERR("failed %s %s: %m\n", olddir, newdir);*/
 
 	return ret;
 }
@@ -73,7 +73,7 @@ pivot(char *new, char *old)
 	ret = pivot_root(new, pivotdir);
 
 	if (ret < 0) {
-		ULOG_ERR("pivot_root failed %s %s: %s\n", new, pivotdir, strerror(errno));
+		ULOG_ERR("pivot_root failed %s %s: %m\n", new, pivotdir);
 		return -1;
 	}
 
@@ -136,8 +136,7 @@ fopivot(char *rw_root, char *ro_root)
 		/* Mainlined overlayfs has been renamed to "overlay", try that first */
 		if (mount(overlay, "/mnt", "overlay", MS_NOATIME, mount_options)) {
 			if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, mount_options)) {
-				ULOG_ERR("mount failed: %s, options %s\n",
-				         strerror(errno), mount_options);
+				ULOG_ERR("mount failed: %s, options %m\n", mount_options);
 				return -1;
 			}
 		}
