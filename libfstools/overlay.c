@@ -243,6 +243,10 @@ jffs2_switch(struct volume *v)
 		ULOG_INFO("performing overlay whiteout\n");
 		umount2("/tmp/root", MNT_DETACH);
 		foreachdir("/overlay/", handle_whiteout);
+
+		/* try hard to be in sync */
+		ULOG_INFO("syncronizing overlay\n");
+		system("cp -a /tmp/root/upper/* / 2>/dev/null");
 		break;
 
 	case FS_EXT4:
