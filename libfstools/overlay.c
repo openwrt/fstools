@@ -67,15 +67,29 @@ handle_rmdir(const char *dir)
 void
 foreachdir(const char *dir, int (*cb)(const char*))
 {
+	static char *globdir = NULL;
+	static size_t globdirlen = 0;
 	struct stat s = { 0 };
-	char globdir[256];
+	size_t dirlen = strlen(dir);
 	glob_t gl;
 	int j;
 
-	if (dir[strlen(dir) - 1] == '/')
-		snprintf(globdir, 256, "%s*", dir);
+	if (dirlen + sizeof("/*") > globdirlen) {
+		/* Alloc extra 256 B to avoid too many reallocs */
+		size_t len = dirlen + sizeof("/*") + 256;
+		char *tmp;
+
+		tmp = realloc(globdir, len);
+		if (!tmp)
+			return;
+		globdir = tmp;
+		globdirlen = len;
+	}
+
+	if (dir[dirlen - 1] == '/')
+		sprintf(globdir, "%s*", dir);
 	else
-		snprintf(globdir, 256, "%s/*", dir); /**/
+		sprintf(globdir, "%s/*", dir);
 
 	if (!glob(globdir, GLOB_NOESCAPE | GLOB_MARK | GLOB_ONLYDIR, NULL, &gl))
 		for (j = 0; j < gl.gl_pathc; j++) {
