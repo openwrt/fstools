@@ -86,10 +86,7 @@ foreachdir(const char *dir, int (*cb)(const char*))
 		globdirlen = len;
 	}
 
-	if (dir[dirlen - 1] == '/')
-		sprintf(globdir, "%s*", dir);
-	else
-		sprintf(globdir, "%s/*", dir);
+	sprintf(globdir, "%s/*", dir);
 
 	if (!glob(globdir, GLOB_NOESCAPE | GLOB_MARK | GLOB_ONLYDIR, NULL, &gl))
 		for (j = 0; j < gl.gl_pathc; j++) {
