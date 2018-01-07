@@ -257,7 +257,8 @@ jffs2_switch(struct volume *v)
 
 		/* try hard to be in sync */
 		ULOG_INFO("syncronizing overlay\n");
-		system("cp -a /tmp/root/upper/* / 2>/dev/null");
+		if (system("cp -a /tmp/root/upper/* / 2>/dev/null"))
+			ULOG_ERR("failed to sync jffs2 overlay\n");
 		break;
 
 	case FS_EXT4:
