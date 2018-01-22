@@ -303,7 +303,7 @@ static int probe_vfat(blkid_probe pr, const struct blkid_idmag *mag)
 	struct vfat_super_block *vs;
 	struct msdos_super_block *ms;
 	const unsigned char *vol_label = 0;
-	unsigned char *vol_serno = NULL, vol_label_buf[11];
+	unsigned char *vol_serno = NULL, vol_label_buf[12] = { 0 };
 	uint16_t sector_size = 0, reserved;
 	uint32_t cluster_count, fat_size;
 	const char *version = NULL;
