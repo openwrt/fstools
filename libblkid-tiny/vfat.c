@@ -302,11 +302,12 @@ static int probe_vfat(blkid_probe pr, const struct blkid_idmag *mag)
 {
 	struct vfat_super_block *vs;
 	struct msdos_super_block *ms;
-	const unsigned char *vol_label = 0;
+	unsigned char *vol_label = 0;
 	unsigned char *vol_serno = NULL, vol_label_buf[12] = { 0 };
 	uint16_t sector_size = 0, reserved;
 	uint32_t cluster_count, fat_size;
 	const char *version = NULL;
+	int i;
 
 	ms = blkid_probe_get_sb(pr, mag, struct msdos_super_block);
 	if (!ms)
@@ -416,6 +417,12 @@ static int probe_vfat(blkid_probe pr, const struct blkid_idmag *mag)
 			    memcmp(fsinfo->signature2, "\x00\x00\x00\x00", 4) != 0)
 				return 1;
 		}
+	}
+
+	for (i = 10; i >= 0; i--) {
+		if (vol_label[i] != ' ')
+			break;
+		vol_label[i] = '\0';
 	}
 
 	if (vol_label && memcmp(vol_label, no_name, 11))
