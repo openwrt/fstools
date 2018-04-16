@@ -112,6 +112,24 @@ foreachdir(const char *dir, int (*cb)(const char*))
 	cb(dir);
 }
 
+static void foreach_mount(int (*cb)(const char *, const char *))
+{
+	FILE *fp = fopen("/proc/mounts", "r");
+	static char line[256];
+
+	if (!fp)
+		return;
+
+	while (fgets(line, sizeof(line), fp)) {
+		char device[32], mount_point[32];
+
+		if (sscanf(line, "%31s %31s %*s %*s %*u %*u", device, mount_point) == 2)
+			cb(device, mount_point);
+	}
+
+	fclose(fp);
+}
+
 void
 overlay_delete(const char *dir, bool _keep_sysupgrade)
 {
@@ -133,6 +151,19 @@ overlay_mount(struct volume *v, char *fs)
 	}
 
 	return 0;
+}
+
+/**
+ * move_mount - move mount point to the new root
+ */
+static int move_mount(const char *device, const char *mount_point)
+{
+	static const char *prefix = "/tmp/root/";
+
+	if (strncmp(mount_point, prefix, strlen(prefix)))
+		return 0;
+
+	return mount_move(prefix, "/", mount_point + strlen(prefix));
 }
 
 static int
@@ -174,7 +205,20 @@ switch2jffs(struct volume *v)
 		return -1;
 	}
 
-	return fopivot("/overlay", "/rom");
+	ret = fopivot("/overlay", "/rom");
+
+	/*
+	 * Besides copying overlay data from "tmpfs" to "jffs2" we should also
+	 * move mount points that user could create during JFFS2 formatting.
+	 * This has to happen after fopivot call because:
+	 * 1) It's trivial to find mount points to move then (/tmp/root/...).
+	 * 2) We can't do that earlier using /rom/overlay/upper/ as overlay(fs)
+	 *    doesn't support mounts. Mounting to upper dir don't make overlay
+	 *    /propagate/ files to the target dir.
+	 */
+	foreach_mount(move_mount);
+
+	return ret;
 }
 
 int
