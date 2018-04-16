@@ -32,7 +32,7 @@ extern int pivot_root(const char *new_root, const char *put_old);
  * @newroot: new directory for the mount point
  */
 int
-mount_move(char *oldroot, char *newroot, char *dir)
+mount_move(const char *oldroot, const char *newroot, const char *dir)
 {
 #ifndef MS_MOVE
 #define MS_MOVE	(1 << 13)

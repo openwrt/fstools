@@ -43,7 +43,7 @@ extern int mount_extroot(void);
 extern int mount_snapshot(struct volume *v);
 extern int mount_overlay(struct volume *v);
 
-extern int mount_move(char *oldroot, char *newroot, char *dir);
+extern int mount_move(const char *oldroot, const char *newroot, const char *dir);
 extern int pivot(char *new, char *old);
 extern int fopivot(char *rw_root, char *ro_root);
 extern int ramoverlay(void);
