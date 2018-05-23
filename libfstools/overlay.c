@@ -341,7 +341,12 @@ static int overlay_mount_fs(struct volume *v)
 		return -1;
 	}
 
-	if (mount(v->blk, "/tmp/overlay", fstype, MS_NOATIME,
+	if (mount(v->blk, "/tmp/overlay", fstype,
+#ifdef OVL_MOUNT_FULL_ACCESS_TIME
+		MS_RELATIME,
+#else
+		MS_NOATIME,
+#endif
 #ifdef OVL_MOUNT_COMPRESS_ZLIB
 		"compr=zlib"
 #else
