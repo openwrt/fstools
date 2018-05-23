@@ -341,7 +341,13 @@ static int overlay_mount_fs(struct volume *v)
 		return -1;
 	}
 
-	if (mount(v->blk, "/tmp/overlay", fstype, MS_NOATIME, NULL)) {
+	if (mount(v->blk, "/tmp/overlay", fstype, MS_NOATIME,
+#ifdef OVL_MOUNT_COMPRESS_ZLIB
+		"compr=zlib"
+#else
+		NULL
+#endif
+		)) {
 		ULOG_ERR("failed to mount -t %s %s /tmp/overlay: %m\n",
 		         fstype, v->blk);
 		return -1;
