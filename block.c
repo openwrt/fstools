@@ -711,6 +711,7 @@ static void check_filesystem(struct probe_info *pr)
 	const char *f2fsck = "/usr/sbin/fsck.f2fs";
 	const char *dosfsck = "/usr/sbin/dosfsck";
 	const char *btrfsck = "/usr/bin/btrfsck";
+	const char *ntfsck = "/usr/bin/ntfsfix";
 	const char *ckfs;
 
 	/* UBIFS does not need stuff like fsck */
@@ -725,6 +726,8 @@ static void check_filesystem(struct probe_info *pr)
 		ckfs = e2fsck;
 	} else if (!strncmp(pr->type, "btrfs", 5)) {
 		ckfs = btrfsck;
+	} else if (!strncmp(pr->type, "ntfs", 4)) {
+		ckfs = ntfsck;
 	} else {
 		ULOG_ERR("check_filesystem: %s is not supported\n", pr->type);
 		return;
@@ -742,6 +745,9 @@ static void check_filesystem(struct probe_info *pr)
 			exit(-1);
 		} else if(!strncmp(pr->type, "btrfs", 5)) {
 			execl(ckfs, ckfs, "--repair", pr->dev, NULL);
+			exit(-1);
+		} else if(!strncmp(pr->type, "ntfs", 4)) {
+			execl(ckfs, ckfs, "-b", pr->dev, NULL);
 			exit(-1);
 		} else {
 			execl(ckfs, ckfs, "-p", pr->dev, NULL);
@@ -1437,8 +1443,9 @@ static int mount_extroot(char *cfg)
 		if (strncmp(pr->type, "ext", 3) &&
 		    strncmp(pr->type, "f2fs", 4) &&
 		    strncmp(pr->type, "btrfs", 5) &&
+		    strncmp(pr->type, "ntfs", 4) &&
 		    strncmp(pr->type, "ubifs", 5)) {
-			ULOG_ERR("extroot: unsupported filesystem %s, try ext4, f2fs, btrfs or ubifs\n", pr->type);
+			ULOG_ERR("extroot: unsupported filesystem %s, try ext4, f2fs, btrfs, ntfs or ubifs\n", pr->type);
 			return -1;
 		}
 
