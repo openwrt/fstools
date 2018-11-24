@@ -742,16 +742,16 @@ static void check_filesystem(struct probe_info *pr)
 	if (!pid) {
 		if(!strncmp(pr->type, "f2fs", 4)) {
 			execl(ckfs, ckfs, "-f", pr->dev, NULL);
-			exit(-1);
+			exit(EXIT_FAILURE);
 		} else if(!strncmp(pr->type, "btrfs", 5)) {
 			execl(ckfs, ckfs, "--repair", pr->dev, NULL);
-			exit(-1);
+			exit(EXIT_FAILURE);
 		} else if(!strncmp(pr->type, "ntfs", 4)) {
 			execl(ckfs, ckfs, "-b", pr->dev, NULL);
-			exit(-1);
+			exit(EXIT_FAILURE);
 		} else {
 			execl(ckfs, ckfs, "-p", pr->dev, NULL);
-			exit(-1);
+			exit(EXIT_FAILURE);
 		}
 	} else if (pid > 0) {
 		int status;

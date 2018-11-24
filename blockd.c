@@ -95,7 +95,7 @@ block(char *cmd, char *action, char *device)
 		argv[a++] = device;
 		execvp(argv[0], argv);
 		ULOG_ERR("failed to spawn %s %s %s\n", *argv, action, device);
-		exit(-1);
+		exit(EXIT_FAILURE);
 
 	default:
 		waitpid(pid, &status, 0);
@@ -422,7 +422,7 @@ static int autofs_mount(void)
 	if (kproto_version != 5) {
 		ULOG_ERR("only kernel protocol version 5 is tested. You have %d.\n",
 			kproto_version);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 	if (ioctl(fd_autofs_write, AUTOFS_IOC_SETTIMEOUT, &autofs_timeout))
 		ULOG_ERR("failed to set autofs timeout\n");
