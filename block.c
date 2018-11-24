@@ -757,8 +757,10 @@ static void check_filesystem(struct probe_info *pr)
 		int status;
 
 		waitpid(pid, &status, 0);
-		if (WEXITSTATUS(status))
+		if (WIFEXITED(status) && WEXITSTATUS(status))
 			ULOG_ERR("check_filesystem: %s returned %d\n", ckfs, WEXITSTATUS(status));
+		if (WIFSIGNALED(status))
+			ULOG_ERR("check_filesystem: %s terminated by %s\n", ckfs, strsignal(WTERMSIG(status)));
 	}
 }
 
