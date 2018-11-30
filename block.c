@@ -1082,34 +1082,21 @@ static int mount_device(struct probe_info *pr, int type)
 	return 0;
 }
 
-static int umount_device(struct probe_info *pr)
+static int umount_device(char *path)
 {
-	struct mount *m;
-	char *device = basename(pr->dev);
 	char *mp;
 	int err;
 
-	if (!pr)
-		return -1;
-
-	if (!strcmp(pr->type, "swap"))
-		return -1;
-
-	mp = find_mount_point(pr->dev);
+	mp = find_mount_point(path);
 	if (!mp)
-		return -1;
-
-	m = find_block(pr->uuid, pr->label, device, NULL);
-	if (m && m->extroot)
 		return -1;
 
 	err = umount2(mp, MNT_DETACH);
 	if (err)
-		ULOG_ERR("unmounting %s (%s)  failed (%d) - %m\n",
-		         pr->dev, mp, errno);
+		ULOG_ERR("unmounting %s (%s) failed (%d) - %m\n", path, mp,
+			 errno);
 	else
-		ULOG_INFO("unmounted %s (%s)\n",
-		          pr->dev, mp);
+		ULOG_INFO("unmounted %s (%s)\n", path, mp);
 
 	free(mp);
 	return err;
@@ -1577,8 +1564,18 @@ static int main_umount(int argc, char **argv)
 	handle_swapfiles(false);
 
 	cache_load(0);
-	list_for_each_entry(pr, &devices, list)
-		umount_device(pr);
+	list_for_each_entry(pr, &devices, list) {
+		struct mount *m;
+
+		if (!strcmp(pr->type, "swap"))
+			continue;
+
+		m = find_block(pr->uuid, pr->label, basename(pr->dev), NULL);
+		if (m && m->extroot)
+			continue;
+
+		umount_device(pr->dev);
+	}
 
 	return 0;
 }
