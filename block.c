@@ -1105,27 +1105,17 @@ static int umount_device(char *path)
 static int mount_action(char *action, char *device, int type)
 {
 	char path[32];
-	char *mount_point;
 
 	if (!action || !device)
 		return -1;
 	snprintf(path, sizeof(path), "/dev/%s", device);
 
 	if (!strcmp(action, "remove")) {
-		int err = 0;
-
 		if (type == TYPE_HOTPLUG)
 			blockd_notify(device, NULL, NULL);
 
-		mount_point = find_mount_point(path);
-		if (mount_point)
-			err = umount2(mount_point, MNT_DETACH);
+		umount_device(path);
 
-		if (err)
-			ULOG_ERR("umount of %s failed (%d) - %m\n",
-			         mount_point, errno);
-
-		free(mount_point);
 		return 0;
 	} else if (strcmp(action, "add")) {
 		ULOG_ERR("Unkown action %s\n", action);
