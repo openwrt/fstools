@@ -1025,8 +1025,8 @@ static int mount_device(struct probe_info *pr, int type)
 		blockd_notify(device, m, pr);
 
 	if (m) {
-		char *target = m->target;
 		char _target[32];
+		char *target;
 		int err = 0;
 
 		switch (type) {
@@ -1049,8 +1049,9 @@ static int mount_device(struct probe_info *pr, int type)
 		if (m->autofs) {
 			snprintf(_target, sizeof(_target), "/tmp/run/blockd/%s", device);
 			target = _target;
-		}
-		if (!target) {
+		} else if (m->target) {
+			target = m->target;
+		} else {
 			snprintf(_target, sizeof(_target), "/mnt/%s", device);
 			target = _target;
 		}
