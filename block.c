@@ -1021,10 +1021,16 @@ static int mount_device(struct probe_info *pr, int type)
 	if (m && m->extroot)
 		return -1;
 
+	if (type == TYPE_HOTPLUG)
+		blockd_notify(device, m, pr);
+
 	if (m) {
+		char *target = m->target;
+		char _target[32];
+		int err = 0;
+
 		switch (type) {
 		case TYPE_HOTPLUG:
-			blockd_notify(device, m, pr);
 			if (m->autofs)
 				return 0;
 			if (!auto_mount)
@@ -1039,14 +1045,6 @@ static int mount_device(struct probe_info *pr, int type)
 				return -1;
 			break;
 		}
-	} else if (type == TYPE_HOTPLUG) {
-		blockd_notify(device, NULL, pr);
-	}
-
-	if (m) {
-		char *target = m->target;
-		char _target[32];
-		int err = 0;
 
 		if (m->autofs) {
 			snprintf(_target, sizeof(_target), "/tmp/run/blockd/%s", device);
