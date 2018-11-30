@@ -992,8 +992,11 @@ static void blockd_notify(char *device, struct mount *m, struct probe_info *pr)
 static int mount_device(struct probe_info *pr, int type)
 {
 	struct mount *m;
+	char _target[32];
+	char *target;
 	char *device;
 	char *mp;
+	int err;
 
 	if (!pr)
 		return -1;
@@ -1024,11 +1027,8 @@ static int mount_device(struct probe_info *pr, int type)
 	if (type == TYPE_HOTPLUG)
 		blockd_notify(device, m, pr);
 
+	/* Check if device should be mounted & set the target directory */
 	if (m) {
-		char _target[32];
-		char *target;
-		int err = 0;
-
 		switch (type) {
 		case TYPE_HOTPLUG:
 			if (m->autofs)
@@ -1055,38 +1055,29 @@ static int mount_device(struct probe_info *pr, int type)
 			snprintf(_target, sizeof(_target), "/mnt/%s", device);
 			target = _target;
 		}
-		mkdir_p(target);
+	} else if (anon_mount) {
+		snprintf(_target, sizeof(_target), "/mnt/%s", device);
+		target = _target;
+	} else {
+		/* No reason to mount this device */
+		return 0;
+	}
 
-		if (check_fs)
-			check_filesystem(pr);
+	/* Mount the device */
 
-		err = handle_mount(pr->dev, target, pr->type, m);
-		if (err)
-			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
-			         pr->dev, pr->type, target, errno);
-		else
-			handle_swapfiles(true);
+	if (check_fs)
+		check_filesystem(pr);
+
+	mkdir_p(target);
+
+	err = handle_mount(pr->dev, target, pr->type, m);
+	if (err) {
+		ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
+				pr->dev, pr->type, target, errno);
 		return err;
 	}
 
-	if (anon_mount) {
-		char target[32];
-		int err = 0;
-
-		snprintf(target, sizeof(target), "/mnt/%s", device);
-		mkdir_p(target);
-
-		if (check_fs)
-			check_filesystem(pr);
-
-		err = handle_mount(pr->dev, target, pr->type, NULL);
-		if (err)
-			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
-			         pr->dev, pr->type, target, errno);
-		else
-			handle_swapfiles(true);
-		return err;
-	}
+	handle_swapfiles(true);
 
 	return 0;
 }
