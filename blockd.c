@@ -112,34 +112,12 @@ static void
 device_free(struct device *device)
 {
 	struct blob_attr *data[__MOUNT_MAX];
-	char *target = NULL;
-	char *path = NULL, _path[64], *mp;
 
 	blobmsg_parse(mount_policy, __MOUNT_MAX, data,
 		      blob_data(device->msg), blob_len(device->msg));
 
-	if (data[MOUNT_AUTOFS]) {
-		target = device->target;
-		snprintf(_path, sizeof(_path), "/tmp/run/blockd/%s",
-			 blobmsg_get_string(data[MOUNT_DEVICE]));
-		path = _path;
-	} else {
-		path = target = device->target;
-	}
-
-	mp = _find_mount_point(device->name);
-	if (path && mp)
-		if (umount2(path, MNT_DETACH))
-			ULOG_ERR("failed to unmount %s\n", path);
-	free(mp);
-
-	if (!target)
-		return;
-
-	if (data[MOUNT_AUTOFS])
-		unlink(target);
-	else
-		rmdir(target);
+	if (data[MOUNT_AUTOFS] && device->target)
+		unlink(device->target);
 }
 
 static void
