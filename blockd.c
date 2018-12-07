@@ -111,29 +111,19 @@ block(char *cmd, char *action, char *device)
 static void
 device_free(struct device *device)
 {
-	struct blob_attr *data[__MOUNT_MAX];
-
-	blobmsg_parse(mount_policy, __MOUNT_MAX, data,
-		      blob_data(device->msg), blob_len(device->msg));
-
-	if (data[MOUNT_AUTOFS] && device->target)
+	if (device->autofs && device->target)
 		unlink(device->target);
 }
 
 static void
 device_add(struct device *device)
 {
-	struct blob_attr *data[__MOUNT_MAX];
 	char path[64];
 
-	blobmsg_parse(mount_policy, __MOUNT_MAX, data,
-		      blob_data(device->msg), blob_len(device->msg));
-
-	if (!data[MOUNT_AUTOFS])
+	if (!device->autofs)
 		return;
 
-	snprintf(path, sizeof(path), "/tmp/run/blockd/%s",
-		 blobmsg_get_string(data[MOUNT_DEVICE]));
+	snprintf(path, sizeof(path), "/tmp/run/blockd/%s", device->name);
 	if (symlink(path, device->target))
 		ULOG_ERR("failed to symlink %s->%s\n", device->target, path);
 }
