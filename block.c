@@ -880,6 +880,35 @@ static int exec_mount(const char *source, const char *target,
 	return err;
 }
 
+static int hotplug_call_mount(const char *action, const char *device)
+{
+	pid_t pid;
+	int err = 0;
+
+	pid = fork();
+	if (!pid) {
+		char * const argv[] = { "hotplug-call", "mount", NULL };
+
+		setenv("ACTION", action, 1);
+		setenv("DEVICE", device, 1);
+
+		execv("/sbin/hotplug-call", argv);
+		exit(-1);
+	} else if (pid > 0) {
+		int status;
+
+		pid = waitpid(pid, &status, 0);
+		if (pid <= 0 || !WIFEXITED(status) || WEXITSTATUS(status)) {
+			err = -ENOEXEC;
+			ULOG_ERR("hotplug-call call failed\n");
+		}
+	} else {
+		err = -errno;
+	}
+
+	return err;
+}
+
 static int handle_mount(const char *source, const char *target,
                         const char *fstype, struct mount *m)
 {
@@ -1079,6 +1108,8 @@ static int mount_device(struct probe_info *pr, int type)
 
 	handle_swapfiles(true);
 
+	hotplug_call_mount("add", device);
+
 	return 0;
 }
 
@@ -1090,6 +1121,8 @@ static int umount_device(char *path)
 	mp = find_mount_point(path);
 	if (!mp)
 		return -1;
+
+	hotplug_call_mount("remove", basename(path));
 
 	err = umount2(mp, MNT_DETACH);
 	if (err)
