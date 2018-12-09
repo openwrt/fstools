@@ -1157,6 +1157,10 @@ static int main_autofs(int argc, char **argv)
 		}
 		return 0;
 	}
+
+	if (argc < 4)
+		return -EINVAL;
+
 	return mount_action(argv[2], argv[3], TYPE_AUTOFS);
 }
 
