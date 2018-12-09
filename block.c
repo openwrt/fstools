@@ -1186,12 +1186,16 @@ static int main_autofs(int argc, char **argv)
 
 		cache_load(0);
 		list_for_each_entry(pr, &devices, list) {
-			struct mount *m = find_block(pr->uuid, pr->label, NULL, NULL);
+			struct mount *m;
 
-			if (m && m->autofs)
-				mount_device(pr, TYPE_HOTPLUG);
-			else
-				blockd_notify(pr->dev, m, pr);
+			if (!strcmp(pr->type, "swap"))
+				continue;
+
+			m = find_block(pr->uuid, pr->label, NULL, NULL);
+			if (m && m->extroot)
+				continue;
+
+			blockd_notify(pr->dev, m, pr);
 		}
 		return 0;
 	}
