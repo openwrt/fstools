@@ -960,13 +960,14 @@ static int handle_mount(const char *source, const char *target,
 	return err;
 }
 
-static void blockd_notify(char *device, struct mount *m, struct probe_info *pr)
+static int blockd_notify(char *device, struct mount *m, struct probe_info *pr)
 {
 	struct ubus_context *ctx = ubus_connect(NULL);
 	uint32_t id;
+	int err;
 
 	if (!ctx)
-		return;
+		return -ENXIO;
 
 	if (!ubus_lookup_id(ctx, "block", &id)) {
 		struct blob_buf buf = { 0 };
@@ -1012,10 +1013,14 @@ static void blockd_notify(char *device, struct mount *m, struct probe_info *pr)
 			blobmsg_add_u32(&buf, "remove", 1);
 		}
 
-		ubus_invoke(ctx, id, "hotplug", buf.head, NULL, NULL, 3000);
+		err = ubus_invoke(ctx, id, "hotplug", buf.head, NULL, NULL, 3000);
+	} else {
+		err = -ENOENT;
 	}
 
 	ubus_free(ctx);
+
+	return err;
 }
 
 static int mount_device(struct probe_info *pr, int type)
