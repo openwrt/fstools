@@ -1130,11 +1130,13 @@ static int umount_device(char *path)
 	hotplug_call_mount("remove", basename(path));
 
 	err = umount2(mp, MNT_DETACH);
-	if (err)
+	if (err) {
 		ULOG_ERR("unmounting %s (%s) failed (%d) - %m\n", path, mp,
 			 errno);
-	else
+	} else {
 		ULOG_INFO("unmounted %s (%s)\n", path, mp);
+		rmdir(mp);
+	}
 
 	free(mp);
 	return err;
