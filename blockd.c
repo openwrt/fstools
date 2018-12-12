@@ -111,8 +111,19 @@ block(char *cmd, char *action, char *device)
 static void
 device_free(struct device *device)
 {
-	if (device->autofs && device->target)
+	char *mp;
+
+	if (!device->autofs)
+		return;
+
+	if (device->target)
 		unlink(device->target);
+
+	mp = _find_mount_point(device->name);
+	if (mp) {
+		block("autofs", "remove", device->name);
+		free(mp);
+	}
 }
 
 static void
