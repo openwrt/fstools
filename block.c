@@ -1113,12 +1113,13 @@ static int mount_device(struct probe_info *pr, int type)
 
 	handle_swapfiles(true);
 
-	hotplug_call_mount("add", device);
+	if (type != TYPE_AUTOFS)
+		hotplug_call_mount("add", device);
 
 	return 0;
 }
 
-static int umount_device(char *path)
+static int umount_device(char *path, int type)
 {
 	char *mp;
 	int err;
@@ -1127,7 +1128,8 @@ static int umount_device(char *path)
 	if (!mp)
 		return -1;
 
-	hotplug_call_mount("remove", basename(path));
+	if (type != TYPE_AUTOFS)
+		hotplug_call_mount("remove", basename(path));
 
 	err = umount2(mp, MNT_DETACH);
 	if (err) {
@@ -1154,7 +1156,7 @@ static int mount_action(char *action, char *device, int type)
 		if (type == TYPE_HOTPLUG)
 			blockd_notify(device, NULL, NULL);
 
-		umount_device(path);
+		umount_device(path, type);
 
 		return 0;
 	} else if (strcmp(action, "add")) {
@@ -1177,6 +1179,8 @@ static int main_hotplug(int argc, char **argv)
 
 static int main_autofs(int argc, char **argv)
 {
+	int err = 0;
+
 	if (argc < 3)
 		return -1;
 
@@ -1199,13 +1203,22 @@ static int main_autofs(int argc, char **argv)
 
 			blockd_notify(pr->dev, m, pr);
 		}
-		return 0;
+	} else if (!strcmp(argv[2], "available")) {
+		err = hotplug_call_mount("add", argv[3]);
+	} else if (!strcmp(argv[2], "unavailable")) {
+		err = hotplug_call_mount("remove", argv[3]);
+	} else {
+		if (argc < 4)
+			return -EINVAL;
+
+		err = mount_action(argv[2], argv[3], TYPE_AUTOFS);
 	}
 
-	if (argc < 4)
-		return -EINVAL;
+	if (err) {
+		ULOG_ERR("autofs: \"%s\" action has failed: %d\n", argv[2], err);
+	}
 
-	return mount_action(argv[2], argv[3], TYPE_AUTOFS);
+	return err;
 }
 
 static int find_block_mtd(char *name, char *part, int plen)
@@ -1612,7 +1625,7 @@ static int main_umount(int argc, char **argv)
 		if (m && m->extroot)
 			continue;
 
-		umount_device(pr->dev);
+		umount_device(pr->dev, TYPE_DEV);
 	}
 
 	return 0;

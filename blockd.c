@@ -116,6 +116,8 @@ device_free(struct device *device)
 	if (!device->autofs)
 		return;
 
+	block("autofs", "unavailable", device->name);
+
 	if (device->target)
 		unlink(device->target);
 
@@ -137,6 +139,8 @@ device_add(struct device *device)
 	snprintf(path, sizeof(path), "/tmp/run/blockd/%s", device->name);
 	if (symlink(path, device->target))
 		ULOG_ERR("failed to symlink %s->%s\n", device->target, path);
+	else
+		block("autofs", "available", device->name);
 }
 
 static int
