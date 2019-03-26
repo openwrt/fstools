@@ -258,8 +258,10 @@ static int rootdisk_volume_init(struct volume *v)
 	char str[128];
 	int ret = 0;
 
-	if (!p->loop_name[0] && rootdisk_create_loop(p) != 0)
+	if (!p->loop_name[0] && rootdisk_create_loop(p) != 0) {
+		ULOG_ERR("unable to create loop device\n");
 		return -1;
+	}
 
 	v->type = BLOCKDEV;
 	v->blk = p->loop_name;
