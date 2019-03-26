@@ -11,7 +11,6 @@
  * GNU General Public License for more details.
  */
 
-#define F2FS_MINSIZE	(100 * 1024 * 1024)
 #define _FILE_OFFSET_BITS 64
 
 #include <sys/types.h>
@@ -31,6 +30,7 @@
 #include <linux/loop.h>
 
 #define ROOTDEV_OVERLAY_ALIGN	(64ULL * 1024ULL)
+#define F2FS_MINSIZE		(100ULL * 1024ULL * 1024ULL)
 
 struct squashfs_super_block {
 	uint32_t s_magic;
