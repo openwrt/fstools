@@ -579,7 +579,6 @@ static char* find_mount_point(char *block)
 {
 	FILE *fp = fopen("/proc/self/mountinfo", "r");
 	static char line[256];
-	int len = strlen(block);
 	char *point = NULL, *pos, *tmp, *cpoint, *devname;
 	struct stat s;
 	int rstat;
@@ -643,7 +642,7 @@ static char* find_mount_point(char *block)
 
 		*pos = '\0';
 		devname = tmp;
-		if (!strncmp(block, devname, len)) {
+		if (!strcmp(block, devname)) {
 			point = strdup(cpoint);
 			break;
 		}
