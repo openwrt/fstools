@@ -147,7 +147,7 @@ static struct volume *ubi_volume_match(char *name, int ubi_num, int volid)
 		return NULL;
 	}
 
-	if (strncmp(name, volname, strlen(volname) + 1))
+	if (strcmp(name, volname))
 		return NULL;
 
 	p = calloc(1, sizeof(struct ubi_volume));

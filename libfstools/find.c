@@ -23,6 +23,7 @@ int
 find_overlay_mount(char *overlay)
 {
 	FILE *fp = fopen("/proc/mounts", "r");
+	size_t len = strlen(overlay);
 	static char line[256];
 	int ret = -1;
 
@@ -30,7 +31,7 @@ find_overlay_mount(char *overlay)
 		return ret;
 
 	while (ret && fgets(line, sizeof(line), fp))
-		if (!strncmp(line, overlay, strlen(overlay)))
+		if (len < sizeof(line) && !strncmp(line, overlay, len) && line[len] == ' ')
 			ret = 0;
 
 	fclose(fp);
@@ -103,7 +104,6 @@ find_mount_point(char *block, int root_only)
 {
 	FILE *fp = fopen("/proc/self/mountinfo", "r");
 	static char line[256];
-	int len = strlen(block);
 	char *point = NULL, *pos, *tmp, *cpoint, *devname, *fstype;
 	struct stat s;
 	int rstat;
@@ -183,7 +183,7 @@ find_mount_point(char *block, int root_only)
 		devname = tmp;
 
 		/* if device name matches */
-		if (!strncmp(block, devname, len + 1)) {
+		if (!strcmp(block, devname)) {
 			if (root_only && fs_rootfs_only(fstype))
 				break;
 
