@@ -294,11 +294,9 @@ static int probe_hfsplus(blkid_probe pr, const struct blkid_idmag *mag)
 	if (be32_to_cpu(key->parent_id) != HFSPLUS_POR_CNID)
 		return 0;
 
-#if 0
 	blkid_probe_set_utf8label(pr, key->unicode,
 			be16_to_cpu(key->unicode_len) * 2,
 			BLKID_ENC_UTF16BE);
-#endif
 
 	return 0;
 }

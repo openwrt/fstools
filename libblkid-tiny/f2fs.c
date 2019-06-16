@@ -71,12 +71,10 @@ static int probe_f2fs(blkid_probe pr, const struct blkid_idmag *mag)
 	if (major == 1 && minor == 0)
 		return 0;
 
-#if 0
 	if (*((unsigned char *) sb->volume_name))
 		blkid_probe_set_utf8label(pr, (unsigned char *) sb->volume_name,
 						sizeof(sb->volume_name),
 						BLKID_ENC_UTF16LE);
-#endif
 
 	blkid_probe_set_uuid(pr, sb->uuid);
 	blkid_probe_sprintf_version(pr, "%u.%u", major, minor);
