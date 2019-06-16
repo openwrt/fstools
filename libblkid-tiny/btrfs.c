@@ -70,7 +70,7 @@ static int probe_btrfs(blkid_probe pr, const struct blkid_idmag *mag)
 	if (*bfs->label)
 		blkid_probe_set_label(pr,
 				(unsigned char *) bfs->label,
-				sizeof(bfs->label));
+				sizeof(bfs->label) - 1);
 
 	blkid_probe_set_uuid(pr, bfs->fsid);
 	blkid_probe_set_uuid_as(pr, bfs->dev_item.uuid, "UUID_SUB");
