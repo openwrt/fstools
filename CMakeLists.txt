@@ -19,6 +19,7 @@ TARGET_LINK_LIBRARIES(fstools ubox)
 INSTALL(TARGETS fstools LIBRARY DESTINATION lib)
 
 ADD_LIBRARY(blkid-tiny SHARED
+		libblkid-tiny/encode.c
 		libblkid-tiny/libblkid-tiny.c
 		libblkid-tiny/mkdev.c
 		libblkid-tiny/ext.c

@@ -121,6 +121,21 @@ int blkid_probe_set_label(blkid_probe pr, unsigned char *label, size_t len)
 	return 0;
 }
 
+int blkid_probe_set_utf8label(blkid_probe pr, unsigned char *label,
+				size_t len, int enc)
+{
+	if (len > (sizeof(pr->label) - 1)) {
+		fprintf(stderr, "label buffer too small %d > %d\n",
+			(int) len, (int) sizeof(pr->label) - 1);
+		return -1;
+	}
+
+	blkid_encode_to_utf8(enc,(unsigned char*) pr->label, len,
+			label, len+1);
+
+	return 0;
+}
+
 int blkid_probe_set_uuid_as(blkid_probe pr, unsigned char *uuid, const char *name)
 {
 	short unsigned int*u = (short unsigned int*) uuid;
