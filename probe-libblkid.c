@@ -37,6 +37,9 @@ load_libblkid(void)
 	if (!libblkid.loaded) {
 		lib = dlopen("libblkid.so", RTLD_GLOBAL);
 
+		if (lib == NULL)
+			lib = dlopen("libblkid.so.1", RTLD_GLOBAL);
+
 		if (lib) {
 			libblkid.alloc  = dlsym(lib, "blkid_new_probe_from_filename");
 			libblkid.probe  = dlsym(lib, "blkid_do_probe");
