@@ -31,7 +31,7 @@
 
 #include <syslog.h>
 
-static char buf[PATH_MAX];
+static char buf[PATH_MAX + 1];
 static char buf2[PATH_MAX];
 static unsigned int mode = 0600;
 
@@ -66,7 +66,7 @@ static void find_devs(bool block)
 
 		strcpy(path, dp->d_name);
 		len = readlink(buf2, buf, sizeof(buf));
-		if (len <= 0)
+		if (len <= 0 || len == sizeof(buf))
 			continue;
 
 		buf[len] = 0;
