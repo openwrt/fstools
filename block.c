@@ -708,7 +708,7 @@ static void check_filesystem(struct probe_info *pr)
 	struct stat statbuf;
 	const char *e2fsck = "/usr/sbin/e2fsck";
 	const char *f2fsck = "/usr/sbin/fsck.f2fs";
-	const char *dosfsck = "/usr/sbin/dosfsck";
+	const char *fatfsck = "/usr/sbin/fsck.fat";
 	const char *btrfsck = "/usr/bin/btrfsck";
 	const char *ntfsck = "/usr/bin/ntfsfix";
 	const char *ckfs;
@@ -718,7 +718,7 @@ static void check_filesystem(struct probe_info *pr)
 		return;
 
 	if (!strncmp(pr->type, "vfat", 4)) {
-		ckfs = dosfsck;
+		ckfs = fatfsck;
 	} else if (!strncmp(pr->type, "f2fs", 4)) {
 		ckfs = f2fsck;
 	} else if (!strncmp(pr->type, "ext", 3)) {
