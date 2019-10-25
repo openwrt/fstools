@@ -86,6 +86,7 @@ static int probe_ntfs(blkid_probe pr, const struct blkid_idmag *mag)
 
 	uint32_t sectors_per_cluster, mft_record_size;
 	uint16_t sector_size;
+	uint64_t volume_serial;
 	uint64_t nr_clusters, off, attr_off;
 	unsigned char *buf_mft;
 
@@ -146,15 +147,16 @@ static int probe_ntfs(blkid_probe pr, const struct blkid_idmag *mag)
 		return 1;
 
 
+	volume_serial = ns->volume_serial;
 	off = le64_to_cpu(ns->mft_cluster_location) * sector_size *
 		sectors_per_cluster;
 
 	DBG(LOWPROBE, ul_debug("NTFS: sector_size=%"PRIu16", mft_record_size=%"PRIu32", "
 			"sectors_per_cluster=%"PRIu32", nr_clusters=%"PRIu64" "
-			"cluster_offset=%"PRIu64"",
+			"cluster_offset=%"PRIu64", volume_serial=%"PRIu64"",
 			sector_size, mft_record_size,
 			sectors_per_cluster, nr_clusters,
-			off));
+			off, volume_serial));
 
 	buf_mft = blkid_probe_get_buffer(pr, off, mft_record_size);
 	if (!buf_mft)
@@ -203,9 +205,9 @@ static int probe_ntfs(blkid_probe pr, const struct blkid_idmag *mag)
 	}
 
 	blkid_probe_sprintf_uuid(pr,
-			(unsigned char *) &ns->volume_serial,
-			sizeof(ns->volume_serial),
-			"%016" PRIX64, le64_to_cpu(ns->volume_serial));
+			(unsigned char *) &volume_serial,
+			sizeof(volume_serial),
+			"%016" PRIX64, le64_to_cpu(volume_serial));
 	return 0;
 }
 
