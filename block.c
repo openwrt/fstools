@@ -1188,30 +1188,47 @@ static int umount_device(char *path, int type, bool all)
 
 static int mount_action(char *action, char *device, int type)
 {
+	struct device *the_dev, *dev;
 	char path[32];
 
 	if (!action || !device)
 		return -1;
-	snprintf(path, sizeof(path), "/dev/%s", device);
-
-	if (!strcmp(action, "remove")) {
-		if (type == TYPE_HOTPLUG)
-			blockd_notify(device, NULL, NULL);
-
-		umount_device(path, type, true);
-
-		return 0;
-	} else if (strcmp(action, "add")) {
-		ULOG_ERR("Unkown action %s\n", action);
-
-		return -1;
-	}
 
 	if (config_load(NULL))
 		return -1;
 	cache_load(0);
 
-	return mount_device(find_block_device(NULL, NULL, path), type);
+	the_dev = find_block_device(NULL, NULL, device);
+
+	if (!strcmp(action, "remove")) {
+		if (type == TYPE_HOTPLUG)
+			blockd_notify(device, NULL, NULL);
+
+		if (!the_dev || !the_dev->m || the_dev->m->type != TYPE_MOUNT) {
+			snprintf(path, sizeof(path), "/dev/%s", device);
+			umount_device(path, type, true);
+		} else
+			vlist_for_element_to_last_reverse(&devices, the_dev, dev, node)
+				if (dev->m && dev->m->type == TYPE_MOUNT)
+					umount_device(dev->pr->dev, type, true);
+		return 0;
+	} else if (!strcmp(action, "add")) {
+		if (!the_dev)
+			return -1;
+		if (the_dev->m && the_dev->m->type == TYPE_MOUNT) {
+			vlist_for_first_to_element(&devices, the_dev, dev, node) {
+				if (dev->m && dev->m->type == TYPE_MOUNT) {
+					int err = mount_device(dev, type);
+					if (err)
+						return err;
+				}
+			}
+			return 0;
+		} else
+			return mount_device(the_dev, type);
+	}
+	ULOG_ERR("Unkown action %s\n", action);
+	return -1;
 }
 
 static int main_hotplug(int argc, char **argv)
