@@ -1118,7 +1118,7 @@ static int mount_device(struct probe_info *pr, int type)
 	return 0;
 }
 
-static int umount_device(char *path, int type)
+static int umount_device(char *path, int type, bool all)
 {
 	char *mp;
 	int err;
@@ -1126,6 +1126,8 @@ static int umount_device(char *path, int type)
 	mp = find_mount_point(path);
 	if (!mp)
 		return -1;
+	if (!strcmp(mp, "/") && !all)
+		return 0;
 
 	if (type != TYPE_AUTOFS)
 		hotplug_call_mount("remove", basename(path));
@@ -1155,7 +1157,7 @@ static int mount_action(char *action, char *device, int type)
 		if (type == TYPE_HOTPLUG)
 			blockd_notify(device, NULL, NULL);
 
-		umount_device(path, type);
+		umount_device(path, type, true);
 
 		return 0;
 	} else if (strcmp(action, "add")) {
@@ -1607,6 +1609,7 @@ static int main_mount(int argc, char **argv)
 static int main_umount(int argc, char **argv)
 {
 	struct probe_info *pr;
+	bool all = false;
 
 	if (config_load(NULL))
 		return -1;
@@ -1614,6 +1617,10 @@ static int main_umount(int argc, char **argv)
 	handle_swapfiles(false);
 
 	cache_load(0);
+
+	if (argc == 3)
+		all = !strcmp(argv[2], "-a");
+
 	list_for_each_entry(pr, &devices, list) {
 		struct mount *m;
 
@@ -1624,7 +1631,7 @@ static int main_umount(int argc, char **argv)
 		if (m && m->extroot)
 			continue;
 
-		umount_device(pr->dev, TYPE_DEV);
+		umount_device(pr->dev, TYPE_DEV, all);
 	}
 
 	return 0;
@@ -1735,7 +1742,6 @@ static int main_swapon(int argc, char **argv)
 		default:
 			return swapon_usage();
 		}
-
 	}
 
 	if (optind != (argc - 1))
