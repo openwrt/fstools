@@ -1087,16 +1087,16 @@ static int mount_device(struct device *dev, int type)
 		return 0;
 	}
 
+	m = dev->m;
+	if (m && m->extroot)
+		return -1;
+
 	mp = find_mount_point(pr->dev);
 	if (mp && (type != TYPE_HOTPLUG)) {
 		ULOG_ERR("%s is already mounted on %s\n", pr->dev, mp);
 		free(mp);
 		return -1;
 	}
-
-	m = dev->m;
-	if (m && m->extroot)
-		return -1;
 
 	if (type == TYPE_HOTPLUG)
 		blockd_notify(device, m, pr);
