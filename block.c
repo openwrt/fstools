@@ -1092,10 +1092,14 @@ static int mount_device(struct device *dev, int type)
 		return -1;
 
 	mp = find_mount_point(pr->dev);
-	if (mp && (type != TYPE_HOTPLUG)) {
-		ULOG_ERR("%s is already mounted on %s\n", pr->dev, mp);
+	if (mp) {
+		if (m && m->type == TYPE_MOUNT && strcmp(m->target, mp)) {
+			ULOG_ERR("%s is already mounted on %s\n", pr->dev, mp);
+			err = -1;
+		} else
+			err = 0;
 		free(mp);
-		return -1;
+		return err;
 	}
 
 	if (type == TYPE_HOTPLUG)
