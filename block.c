@@ -575,23 +575,6 @@ static void cache_load(int mtd)
 }
 
 
-static int print_block_uci(struct probe_info *pr)
-{
-	if (!strcmp(pr->type, "swap")) {
-		printf("config 'swap'\n");
-	} else {
-		printf("config 'mount'\n");
-		printf("\toption\ttarget\t'/mnt/%s'\n", basename(pr->dev));
-	}
-	if (pr->uuid)
-		printf("\toption\tuuid\t'%s'\n", pr->uuid);
-	else
-		printf("\toption\tdevice\t'%s'\n", pr->dev);
-	printf("\toption\tenabled\t'0'\n\n");
-
-	return 0;
-}
-
 static struct device* find_block_device(char *uuid, char *label, char *path)
 {
 	struct device *dev;
@@ -702,6 +685,30 @@ static char* find_mount_point(char *block)
 	fclose(fp);
 
 	return point;
+}
+
+static int print_block_uci(struct probe_info *pr)
+{
+	if (!strcmp(pr->type, "swap")) {
+		printf("config 'swap'\n");
+	} else {
+		char *mp = find_mount_point(pr->dev);
+
+		printf("config 'mount'\n");
+		if (mp) {
+			printf("\toption\ttarget\t'%s'\n", mp);
+			free(mp);
+		} else {
+			printf("\toption\ttarget\t'/mnt/%s'\n", basename(pr->dev));
+		}
+	}
+	if (pr->uuid)
+		printf("\toption\tuuid\t'%s'\n", pr->uuid);
+	else
+		printf("\toption\tdevice\t'%s'\n", pr->dev);
+	printf("\toption\tenabled\t'0'\n\n");
+
+	return 0;
 }
 
 static int print_block_info(struct probe_info *pr)
