@@ -255,7 +255,7 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 		strcpy(_name, devname);
 		device->target = __target;
 		strcpy(__target, target);
-		vlist_add(&devices, &device->node, blobmsg_get_string(data[MOUNT_DEVICE]));
+		vlist_add(&devices, &device->node, device->name);
 	}
 	vlist_flush(&devices);
 
