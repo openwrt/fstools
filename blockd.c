@@ -237,7 +237,6 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 	if (!device)
 		return UBUS_STATUS_UNKNOWN_ERROR;
 
-	vlist_update(&devices);
 	if (data[MOUNT_REMOVE]) {
 		vlist_delete(&devices, &device->node);
 	} else {
@@ -257,7 +256,6 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 		strcpy(__target, target);
 		vlist_add(&devices, &device->node, device->name);
 	}
-	vlist_flush(&devices);
 
 	return 0;
 }
