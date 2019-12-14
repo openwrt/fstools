@@ -13,9 +13,6 @@
 
 int blkid_debug_mask = 0;
 
-static unsigned char *probe_buffer;
-static unsigned int probe_buffer_size = 0;
-
 int get_linux_version (void)
 {
 	static int kver = -1;
@@ -81,32 +78,27 @@ int blkid_probe_sprintf_version(blkid_probe pr, const char *fmt, ...)
 unsigned char *blkid_probe_get_buffer(blkid_probe pr,
 				blkid_loff_t off, blkid_loff_t len)
 {
+	struct blkid_bufinfo *bf;
 	int ret;
-	unsigned char *buf;
 
-	if (len > probe_buffer_size) {
-		buf = realloc(probe_buffer, len);
-
-		if (!buf) {
-			fprintf(stderr, "failed to allocate %d byte buffer\n",
-			        (int)len);
-
-			return NULL;
-		}
-
-		probe_buffer = buf;
-		probe_buffer_size = len;
-	}
-
-	memset(probe_buffer, 0, probe_buffer_size);
+	bf = malloc(sizeof(*bf) + len);
+	if (!bf)
+		return NULL;
+	memset(bf, 0, sizeof(*bf));
+	bf->data = ((unsigned char *)bf) + sizeof(*bf);
 
 	lseek(pr->fd, off, SEEK_SET);
-	ret = read(pr->fd, probe_buffer, len);
+	ret = read(pr->fd, bf->data, len);
 
-	if (ret != len)
+	if (ret != len) {
 		fprintf(stderr, "faile to read blkid\n");
+		free(bf);
+		return NULL;
+	}
 
-	return probe_buffer;
+	list_add_tail(&bf->bufs, &pr->buffers);
+
+	return bf->data;
 }
 
 int blkid_probe_set_label(blkid_probe pr, unsigned char *label, size_t len)

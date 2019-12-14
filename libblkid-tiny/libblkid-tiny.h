@@ -58,6 +58,8 @@ struct blkid_struct_probe
 	char	uuid[64];
 	char	label[256];
 	char	version[64];
+
+	struct list_head	buffers;	/* list of buffers */
 };
 
 struct blkid_struct_probe *blkid_new_probe(void);
