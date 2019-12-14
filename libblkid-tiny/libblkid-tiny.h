@@ -60,6 +60,9 @@ struct blkid_struct_probe
 	char	version[64];
 };
 
+struct blkid_struct_probe *blkid_new_probe(void);
+void blkid_free_probe(struct blkid_struct_probe *pr);
+
 extern int probe_block(char *block, struct blkid_struct_probe *pr);
 extern int mkblkdev(void);
 

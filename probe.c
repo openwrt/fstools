@@ -21,33 +21,39 @@ static struct probe_info *
 probe_path_tiny(const char *path)
 {
 	struct probe_info *info = NULL;
-	struct blkid_struct_probe pr = { };
+	struct blkid_struct_probe *pr;
 	char *type, *dev, *uuid, *label, *version;
 
-	if (probe_block((char *)path, &pr) == 0 && pr.id && !pr.err) {
+	pr = blkid_new_probe();
+	if (!pr)
+		return NULL;
+
+	if (probe_block((char *)path, pr) == 0 && pr->id && !pr->err) {
 		info = calloc_a(sizeof(*info),
-		                &type,    strlen(pr.id->name) + 1,
-		                &dev,     strlen(pr.dev)      + 1,
-		                &uuid,    strlen(pr.uuid)     + 1,
-		                &label,   strlen(pr.label)    + 1,
-		                &version, strlen(pr.version)  + 1);
+		                &type,    strlen(pr->id->name) + 1,
+		                &dev,     strlen(pr->dev)      + 1,
+		                &uuid,    strlen(pr->uuid)     + 1,
+		                &label,   strlen(pr->label)    + 1,
+		                &version, strlen(pr->version)  + 1);
 
 		if (info) {
-			info->type = strcpy(type, pr.id->name);
+			info->type = strcpy(type, pr->id->name);
 
-			if (pr.dev[0])
-				info->dev = strcpy(dev, pr.dev);
+			if (pr->dev[0])
+				info->dev = strcpy(dev, pr->dev);
 
-			if (pr.uuid[0])
-				info->uuid = strcpy(uuid, pr.uuid);
+			if (pr->uuid[0])
+				info->uuid = strcpy(uuid, pr->uuid);
 
-			if (pr.label[0])
-				info->label = strcpy(label, pr.label);
+			if (pr->label[0])
+				info->label = strcpy(label, pr->label);
 
-			if (pr.version[0])
-				info->version = strcpy(version, pr.version);
+			if (pr->version[0])
+				info->version = strcpy(version, pr->version);
 		}
 	}
+
+	blkid_free_probe(pr);
 
 	return info;
 }
