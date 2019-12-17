@@ -97,7 +97,7 @@ extern int blkid_probe_set_uuid(blkid_probe pr, unsigned char *uuid);
 extern int blkid_probe_set_uuid_as(blkid_probe pr, unsigned char *uuid, const char *name);
 
 extern int blkid_probe_set_id_label(blkid_probe pr, const char *name,
-			     unsigned char *data, size_t len);
+			     const unsigned char *data, size_t len);
 extern int blkid_probe_set_utf8_id_label(blkid_probe pr, const char *name,
 			     unsigned char *data, size_t len, int enc);
 

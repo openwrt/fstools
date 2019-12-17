@@ -101,6 +101,12 @@ unsigned char *blkid_probe_get_buffer(blkid_probe pr,
 	return bf->data;
 }
 
+int blkid_probe_set_id_label(blkid_probe pr, const char *name,
+			     const unsigned char *data, size_t len)
+{
+	return -ENOTSUP;
+}
+
 int blkid_probe_set_label(blkid_probe pr, unsigned char *label, size_t len)
 {
 	if (len > (sizeof(pr->label) - 1)) {
