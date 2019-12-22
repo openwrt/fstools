@@ -24,7 +24,7 @@ probe_path_tiny(const char *path)
 	struct blkid_struct_probe *pr;
 	char *type, *dev, *uuid, *label, *version;
 
-	pr = blkid_new_probe();
+	pr = blkidtiny_new_probe();
 	if (!pr)
 		return NULL;
 
@@ -53,7 +53,7 @@ probe_path_tiny(const char *path)
 		}
 	}
 
-	blkid_free_probe(pr);
+	blkidtiny_free_probe(pr);
 
 	return info;
 }

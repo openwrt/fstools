@@ -14,7 +14,7 @@
 
 static int blkid_probe_reset_buffers(struct blkid_struct_probe *pr);
 
-struct blkid_struct_probe *blkid_new_probe(void)
+struct blkid_struct_probe *blkidtiny_new_probe(void)
 {
 	struct blkid_struct_probe *pr;
 
@@ -27,7 +27,7 @@ struct blkid_struct_probe *blkid_new_probe(void)
 	return pr;
 }
 
-void blkid_free_probe(struct blkid_struct_probe *pr)
+void blkidtiny_free_probe(struct blkid_struct_probe *pr)
 {
 	if (!pr)
 		return;

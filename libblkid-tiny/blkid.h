@@ -215,11 +215,11 @@ extern char *blkid_evaluate_spec(const char *spec, blkid_cache *cache)
 			__ul_attribute__((warn_unused_result));
 
 /* probe.c */
-extern blkid_probe blkid_new_probe(void)
+extern blkid_probe blkidtiny_new_probe(void)
 			__ul_attribute__((warn_unused_result));
 extern blkid_probe blkid_new_probe_from_filename(const char *filename)
 			__ul_attribute__((warn_unused_result));
-extern void blkid_free_probe(blkid_probe pr);
+extern void blkidtiny_free_probe(blkid_probe pr);
 
 extern void blkid_reset_probe(blkid_probe pr);
 

@@ -62,8 +62,8 @@ struct blkid_struct_probe
 	struct list_head	buffers;	/* list of buffers */
 };
 
-struct blkid_struct_probe *blkid_new_probe(void);
-void blkid_free_probe(struct blkid_struct_probe *pr);
+struct blkid_struct_probe *blkidtiny_new_probe(void);
+void blkidtiny_free_probe(struct blkid_struct_probe *pr);
 
 extern int probe_block(char *block, struct blkid_struct_probe *pr);
 extern int mkblkdev(void);
