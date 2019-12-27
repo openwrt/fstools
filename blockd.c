@@ -283,6 +283,8 @@ block_info(struct ubus_context *ctx, struct ubus_object *obj,
 		if (mp) {
 			blobmsg_add_string(&bb, "mount", mp);
 			free(mp);
+		} else if (device->autofs && device->target) {
+			blobmsg_add_string(&bb, "mount", device->target);
 		}
 		blobmsg_close_table(&bb, t);
 	}
