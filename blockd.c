@@ -131,12 +131,19 @@ device_free(struct device *device)
 static void
 device_add(struct device *device)
 {
+	struct stat st;
 	char path[64];
 
 	if (!device->autofs)
 		return;
 
 	snprintf(path, sizeof(path), "/tmp/run/blockd/%s", device->name);
+	if (!lstat(device->target, &st)) {
+		if (S_ISLNK(st.st_mode))
+			unlink(device->target);
+		else if (S_ISDIR(st.st_mode))
+			rmdir(device->target);
+	}
 	if (symlink(path, device->target))
 		ULOG_ERR("failed to symlink %s->%s (%d) - %m\n", device->target, path, errno);
 	else
