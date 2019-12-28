@@ -1072,6 +1072,7 @@ static int mount_device(struct device *dev, int type)
 {
 	struct mount *m;
 	struct probe_info *pr;
+	struct stat st;
 	char _target[32];
 	char *target;
 	char *device;
@@ -1154,6 +1155,8 @@ static int mount_device(struct device *dev, int type)
 		check_filesystem(pr);
 
 	mkdir_p(target);
+	if (!lstat(target, &st) && S_ISLNK(st.st_mode))
+		unlink(target);
 
 	err = handle_mount(pr->dev, target, pr->type, m);
 	if (err) {
