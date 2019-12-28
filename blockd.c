@@ -138,7 +138,7 @@ device_add(struct device *device)
 
 	snprintf(path, sizeof(path), "/tmp/run/blockd/%s", device->name);
 	if (symlink(path, device->target))
-		ULOG_ERR("failed to symlink %s->%s\n", device->target, path);
+		ULOG_ERR("failed to symlink %s->%s (%d) - %m\n", device->target, path, errno);
 	else
 		block("autofs", "available", device->name);
 }
@@ -158,7 +158,7 @@ device_move(struct device *device_o, struct device *device_n)
 		unlink(device_o->target);
 		snprintf(path, sizeof(path), "/tmp/run/blockd/%s", device_n->name);
 		if (symlink(path, device_n->target))
-			ULOG_ERR("failed to symlink %s->%s\n", device_n->target, path);
+			ULOG_ERR("failed to symlink %s->%s (%d) - %m\n", device_n->target, path, errno);
 	} else {
 		mkdir(device_n->target, 0755);
 		if (mount(device_o->target, device_n->target, NULL, MS_MOVE, NULL))
