@@ -1543,7 +1543,7 @@ static int mount_extroot(char *cfg)
 		ULOG_INFO("extroot: device not present, retrying in %u seconds\n", delay_root);
 		sleep(delay_root);
 		make_devs();
-		cache_load(0);
+		cache_load(1);
 		dev = find_block_device(m->uuid, m->label, m->device);
 	}
 	if (dev) {
