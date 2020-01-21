@@ -36,31 +36,20 @@ struct mtd_volume {
 
 static struct driver mtd_driver;
 
-static int mtd_open_device(const char *dev)
-{
-	int ret;
-
-	ret = open(dev, O_RDWR | O_SYNC);
-	if (ret < 0)
-		ret = open(dev, O_RDONLY);
-
-	return ret;
-}
-
 static int mtd_open(const char *mtd, int block)
 {
 	FILE *fp;
 	char dev[PATH_MAX];
-	int i, ret;
+	int i, ret, flags = O_RDWR | O_SYNC;
 
 	if ((fp = fopen("/proc/mtd", "r"))) {
 		while (fgets(dev, sizeof(dev), fp)) {
 			if (sscanf(dev, "mtd%d:", &i) && strstr(dev, mtd)) {
 				snprintf(dev, sizeof(dev), "/dev/mtd%s/%d", (block ? "block" : ""), i);
-				ret = mtd_open_device(dev);
+				ret = open(dev, flags);
 				if (ret < 0) {
 					snprintf(dev, sizeof(dev), "/dev/mtd%s%d", (block ? "block" : ""), i);
-					ret = mtd_open_device(dev);
+					ret = open(dev, flags);
 				}
 				fclose(fp);
 				return ret;
@@ -69,7 +58,7 @@ static int mtd_open(const char *mtd, int block)
 		fclose(fp);
 	}
 
-	return mtd_open_device(mtd);
+	return open(mtd, flags);
 }
 
 static void mtd_volume_close(struct mtd_volume *p)
