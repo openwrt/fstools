@@ -30,6 +30,10 @@
 #include "libfstools.h"
 #include "volume.h"
 
+#ifndef GLOB_ONLYDIR
+#define GLOB_ONLYDIR 0x100
+#endif
+
 #define SWITCH_JFFS2 "/tmp/.switch_jffs2"
 
 static bool keep_sysupgrade;
