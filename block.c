@@ -82,20 +82,9 @@ struct mount {
 	unsigned int prio;
 };
 
-struct device {
-	struct vlist_node node;
-
-	struct probe_info *pr;
-	struct mount *m;
-};
-
-static void vlist_nop_update(struct vlist_tree *tree, struct vlist_node *node_new,
-			  struct vlist_node *node_old);
-static int devices_cmp(const void *k1, const void *k2, void *ptr);
-
+static struct vlist_tree mounts;
 static struct blob_buf b;
-static VLIST_TREE(mounts, avl_strcmp, vlist_nop_update, false, false);
-static VLIST_TREE(devices, devices_cmp, vlist_nop_update, false, false);
+static LIST_HEAD(devices);
 static int anon_mount, anon_swap, auto_mount, auto_swap, check_fs;
 static unsigned int delay_root;
 
@@ -420,10 +409,9 @@ static struct mount* find_block(const char *uuid, const char *label, const char 
 	return NULL;
 }
 
-static void vlist_nop_update(struct vlist_tree *tree, struct vlist_node *node_new,
+static void mounts_update(struct vlist_tree *tree, struct vlist_node *node_new,
 			  struct vlist_node *node_old)
 {
-	// NOTE: free on delete skipped
 }
 
 static struct uci_package * config_try_load(struct uci_context *ctx, char *path)
@@ -453,6 +441,8 @@ static int config_load(char *cfg)
 	struct uci_package *pkg = NULL;
 	struct uci_element *e;
 	char path[64];
+
+	vlist_init(&mounts, avl_strcmp, mounts_update);
 
 	if (cfg) {
 		snprintf(path, sizeof(path), "%s/upper/etc/config/fstab", cfg);
@@ -492,15 +482,15 @@ static int config_load(char *cfg)
 
 static struct probe_info* _probe_path(char *path)
 {
-	struct device *dev;
+	struct probe_info *pr;
 	char tmppath[64];
 
 	/* skip ubi device if ubiblock device is present */
 	if (path[5] == 'u' && path[6] == 'b' && path[7] == 'i' &&
 	    path[8] >= '0' && path[8] <= '9' ) {
 		snprintf(tmppath, sizeof(tmppath), "/dev/ubiblock%s", path + 8);
-		vlist_for_each_element(&devices, dev, node)
-			if (!strcasecmp(dev->pr->dev, tmppath))
+		list_for_each_entry(pr, &devices, list)
+			if (!strcasecmp(pr->dev, tmppath))
 				return NULL;
 	}
 
@@ -512,20 +502,14 @@ static int _cache_load(const char *path)
 	int gl_flags = GLOB_NOESCAPE | GLOB_MARK;
 	int j;
 	glob_t gl;
-	struct device *dev;
 
 	if (glob(path, gl_flags, NULL, &gl) < 0)
 		return -1;
 
 	for (j = 0; j < gl.gl_pathc; j++) {
 		struct probe_info *pr = _probe_path(gl.gl_pathv[j]);
-		if (pr) {
-			dev = malloc(sizeof(struct device));
-			dev->pr = pr;
-			dev->m = find_block(pr->uuid, pr->label,
-					basename(pr->dev), NULL);
-			vlist_add(&devices, &dev->node, dev);
-		}
+		if (pr)
+			list_add_tail(&pr->list, &devices);
 	}
 
 	globfree(&gl);
@@ -533,30 +517,8 @@ static int _cache_load(const char *path)
 	return 0;
 }
 
-static int devices_cmp(const void *k1, const void *k2, void *ptr)
-{
-	struct device *dev1 = (struct device *)k1;
-	struct device *dev2 = (struct device *)k2;
-
-	if (dev1->m) {
-		if (!dev2->m)
-			return -1;
-		if (dev1->m->type == TYPE_MOUNT && dev2->m->type == TYPE_MOUNT &&
-				dev1->m->target && dev2->m->target) {
-			int len1 = strlen(dev1->m->target);
-			int len2 = strlen(dev2->m->target);
-			if (len1 != len2)
-				return len1 - len2;
-		}
-	} else if (dev2->m) {
-		return 1;
-	}
-	return strcmp(dev1->pr->dev, dev2->pr->dev);
-}
-
 static void cache_load(int mtd)
 {
-	vlist_update(&devices);
 	if (mtd) {
 		_cache_load("/dev/mtdblock*");
 		_cache_load("/dev/ubiblock*");
@@ -571,28 +533,27 @@ static void cache_load(int mtd)
 	_cache_load("/dev/vd*");
 	_cache_load("/dev/xvd*");
 	_cache_load("/dev/mapper/*");
-	vlist_flush(&devices);
 }
 
 
-static struct device* find_block_device(char *uuid, char *label, char *path)
+static struct probe_info* find_block_info(char *uuid, char *label, char *path)
 {
-	struct device *dev;
+	struct probe_info *pr = NULL;
 
 	if (uuid)
-		vlist_for_each_element(&devices, dev, node)
-			if (dev->pr->uuid && !strcasecmp(dev->pr->uuid, uuid))
-				return dev;
+		list_for_each_entry(pr, &devices, list)
+			if (pr->uuid && !strcasecmp(pr->uuid, uuid))
+				return pr;
 
 	if (label)
-		vlist_for_each_element(&devices, dev, node)
-			if (dev->pr->label && !strcmp(dev->pr->label, label))
-				return dev;
+		list_for_each_entry(pr, &devices, list)
+			if (pr->label && !strcmp(pr->label, label))
+				return pr;
 
 	if (path)
-		vlist_for_each_element(&devices, dev, node)
-			if (dev->pr->dev && !strcmp(basename(dev->pr->dev), basename(path)))
-				return dev;
+		list_for_each_entry(pr, &devices, list)
+			if (pr->dev && !strcmp(basename(pr->dev), basename(path)))
+				return pr;
 
 	return NULL;
 }
@@ -1068,10 +1029,9 @@ static int blockd_notify(char *device, struct mount *m, struct probe_info *pr)
 	return err;
 }
 
-static int mount_device(struct device *dev, int type)
+static int mount_device(struct probe_info *pr, int type)
 {
 	struct mount *m;
-	struct probe_info *pr;
 	struct stat st;
 	char _target[32];
 	char *target;
@@ -1079,10 +1039,9 @@ static int mount_device(struct device *dev, int type)
 	char *mp;
 	int err;
 
-	if (!dev)
+	if (!pr)
 		return -1;
 
-	pr = dev->pr;
 	device = basename(pr->dev);
 
 	if (!strcmp(pr->type, "swap")) {
@@ -1095,7 +1054,7 @@ static int mount_device(struct device *dev, int type)
 		return 0;
 	}
 
-	m = dev->m;
+	m = find_block(pr->uuid, pr->label, device, NULL);
 	if (m && m->extroot)
 		return -1;
 
@@ -1225,7 +1184,7 @@ static int mount_action(char *action, char *device, int type)
 		return -1;
 	cache_load(0);
 
-	return mount_device(find_block_device(NULL, NULL, path), type);
+	return mount_device(find_block_info(NULL, NULL, path), type);
 }
 
 static int main_hotplug(int argc, char **argv)
@@ -1241,21 +1200,19 @@ static int main_autofs(int argc, char **argv)
 		return -1;
 
 	if (!strcmp(argv[2], "start")) {
-		struct device *dev;
 		struct probe_info *pr;
 
 		if (config_load(NULL))
 			return -1;
 
 		cache_load(0);
-		vlist_for_each_element(&devices, dev, node) {
+		list_for_each_entry(pr, &devices, list) {
 			struct mount *m;
 
-			pr = dev->pr;
 			if (!strcmp(pr->type, "swap"))
 				continue;
 
-			m = dev->m;
+			m = find_block(pr->uuid, pr->label, NULL, NULL);
 			if (m && m->extroot)
 				continue;
 
@@ -1419,8 +1376,7 @@ static int test_fs_support(const char *name)
 
 static int check_extroot(char *path)
 {
-	struct device *dev;
-	struct probe_info *pr;
+	struct probe_info *pr = NULL;
 	char devpath[32];
 
 #ifdef UBIFS_EXTROOT
@@ -1443,8 +1399,7 @@ static int check_extroot(char *path)
 	}
 #endif
 
-	vlist_for_each_element(&devices, dev, node) {
-		pr = dev->pr;
+	list_for_each_entry(pr, &devices, list) {
 		if (!strcmp(pr->dev, devpath)) {
 			struct stat s;
 			FILE *fp = NULL;
@@ -1502,7 +1457,6 @@ static int mount_extroot(char *cfg)
 	char overlay[] = "/tmp/extroot/overlay";
 	char mnt[] = "/tmp/extroot/mnt";
 	char *path = mnt;
-	struct device *dev;
 	struct probe_info *pr;
 	struct mount *m;
 	int err = -1;
@@ -1523,17 +1477,16 @@ static int mount_extroot(char *cfg)
 	}
 
 	/* Find block device pointed by the mount config */
-	dev = find_block_device(m->uuid, m->label, m->device);
+	pr = find_block_info(m->uuid, m->label, m->device);
 
-	if (!dev && delay_root){
+	if (!pr && delay_root){
 		ULOG_INFO("extroot: device not present, retrying in %u seconds\n", delay_root);
 		sleep(delay_root);
 		make_devs();
 		cache_load(1);
-		dev = find_block_device(m->uuid, m->label, m->device);
+		pr = find_block_info(m->uuid, m->label, m->device);
 	}
-	if (dev) {
-		pr = dev->pr;
+	if (pr) {
 		if (strncmp(pr->type, "ext", 3) &&
 		    strncmp(pr->type, "f2fs", 4) &&
 		    strncmp(pr->type, "btrfs", 5) &&
@@ -1577,6 +1530,7 @@ static int mount_extroot(char *cfg)
 
 static int main_extroot(int argc, char **argv)
 {
+	struct probe_info *pr;
 	char blkdev_path[32] = { 0 };
 	int err = -1;
 #ifdef UBIFS_EXTROOT
@@ -1605,8 +1559,8 @@ static int main_extroot(int argc, char **argv)
 	/* Start with looking for MTD partition */
 	find_block_mtd("\"rootfs_data\"", blkdev_path, sizeof(blkdev_path));
 	if (blkdev_path[0]) {
-		struct device *dev = find_block_device(NULL, NULL, blkdev_path);
-		if (dev && !strcmp(dev->pr->type, "jffs2")) {
+		pr = find_block_info(NULL, NULL, blkdev_path);
+		if (pr && !strcmp(pr->type, "jffs2")) {
 			char cfg[] = "/tmp/jffs_cfg";
 
 			/*
@@ -1652,14 +1606,14 @@ static int main_extroot(int argc, char **argv)
 
 static int main_mount(int argc, char **argv)
 {
-	struct device *dev;
+	struct probe_info *pr;
 
 	if (config_load(NULL))
 		return -1;
 
 	cache_load(1);
-	vlist_for_each_element(&devices, dev, node)
-		mount_device(dev, TYPE_DEV);
+	list_for_each_entry(pr, &devices, list)
+		mount_device(pr, TYPE_DEV);
 
 	handle_swapfiles(true);
 
@@ -1668,7 +1622,6 @@ static int main_mount(int argc, char **argv)
 
 static int main_umount(int argc, char **argv)
 {
-	struct device *dev;
 	struct probe_info *pr;
 	bool all = false;
 
@@ -1682,14 +1635,13 @@ static int main_umount(int argc, char **argv)
 	if (argc == 3)
 		all = !strcmp(argv[2], "-a");
 
-	vlist_for_each_element_reverse(&devices, dev, node) {
+	list_for_each_entry(pr, &devices, list) {
 		struct mount *m;
 
-		pr = dev->pr;
 		if (!strcmp(pr->type, "swap"))
 			continue;
 
-		m = dev->m;
+		m = find_block(pr->uuid, pr->label, basename(pr->dev), NULL);
 		if (m && m->extroot)
 			continue;
 
@@ -1701,7 +1653,7 @@ static int main_umount(int argc, char **argv)
 
 static int main_detect(int argc, char **argv)
 {
-	struct device *dev;
+	struct probe_info *pr;
 
 	cache_load(0);
 	printf("config 'global'\n");
@@ -1711,8 +1663,8 @@ static int main_detect(int argc, char **argv)
 	printf("\toption\tauto_mount\t'1'\n");
 	printf("\toption\tdelay_root\t'5'\n");
 	printf("\toption\tcheck_fs\t'0'\n\n");
-	vlist_for_each_element(&devices, dev, node)
-		print_block_uci(dev->pr);
+	list_for_each_entry(pr, &devices, list)
+		print_block_uci(pr);
 
 	return 0;
 }
@@ -1720,12 +1672,12 @@ static int main_detect(int argc, char **argv)
 static int main_info(int argc, char **argv)
 {
 	int i;
-	struct device *dev;
+	struct probe_info *pr;
 
 	cache_load(1);
 	if (argc == 2) {
-		vlist_for_each_element(&devices, dev, node)
-			print_block_info(dev->pr);
+		list_for_each_entry(pr, &devices, list)
+			print_block_info(pr);
 
 		return 0;
 	};
@@ -1741,9 +1693,9 @@ static int main_info(int argc, char **argv)
 			ULOG_ERR("%s is not a block device\n", argv[i]);
 			continue;
 		}
-		dev = find_block_device(NULL, NULL, argv[i]);
-		if (dev)
-			print_block_info(dev->pr);
+		pr = find_block_info(NULL, NULL, argv[i]);
+		if (pr)
+			print_block_info(pr);
 	}
 
 	return 0;
@@ -1765,7 +1717,6 @@ static int main_swapon(int argc, char **argv)
 	FILE *fp;
 	char *lineptr;
 	size_t s;
-	struct device *dev;
 	struct probe_info *pr;
 	int flags = 0;
 	int pri;
@@ -1790,8 +1741,7 @@ static int main_swapon(int argc, char **argv)
 			return 0;
 		case 'a':
 			cache_load(0);
-			vlist_for_each_element(&devices, dev, node) {
-				pr = dev->pr;
+			list_for_each_entry(pr, &devices, list) {
 				if (strcmp(pr->type, "swap"))
 					continue;
 				if (swapon(pr->dev, 0))
