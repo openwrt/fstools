@@ -187,7 +187,6 @@ static int mtd_volume_identify(struct volume *v)
 {
 	struct mtd_volume *p = container_of(v, struct mtd_volume, v);;
 	__u32 deadc0de;
-	__u16 jffs2;
 	size_t sz;
 
 	if (mtd_volume_load(p)) {
@@ -202,6 +201,16 @@ static int mtd_volume_identify(struct volume *v)
 		return -1;
 	}
 
+	if (deadc0de == ~0) {
+		struct mtd_oob_buf oob = {
+			.start = 0,
+			.length = sizeof(deadc0de),
+			.ptr = (void *)&deadc0de,
+		};
+
+		ioctl(p->fd, MEMREADOOB, &oob);
+	}
+
 	if (deadc0de == __be32_to_cpu(0x4f575254))
 		return FS_SNAPSHOT;
 
@@ -210,10 +219,9 @@ static int mtd_volume_identify(struct volume *v)
 		return FS_DEADCODE;
 	}
 
-	jffs2 = __be16_to_cpu(deadc0de >> 16);
-	if (jffs2 == 0x1985) {
+	if (__be16_to_cpu(deadc0de) == 0x1985 ||
+	    __be16_to_cpu(deadc0de >> 16) == 0x1985)
 		return FS_JFFS2;
-	}
 
 	if (v->type == UBIVOLUME && deadc0de == 0xffffffff) {
 		return FS_JFFS2;
