@@ -1374,6 +1374,15 @@ static int test_fs_support(const char *name)
 	return rv;
 }
 
+/**
+ * Check if mounted partition is a valid extroot
+ *
+ * @path target mount point
+ *
+ * Valid extroot partition has to contain /etc/.extroot-uuid with UUID of root
+ * device. This function reads UUID and verifies it OR writes UUID to
+ * .extroot-uuid if it doesn't exist yet (first extroot usage).
+ */
 static int check_extroot(char *path)
 {
 	struct probe_info *pr = NULL;
@@ -1528,6 +1537,12 @@ static int mount_extroot(char *cfg)
 	return err;
 }
 
+/**
+ * Look for extroot config and mount it if present
+ *
+ * Look for /etc/config/fstab on all supported partitions and use it for
+ * mounting extroot if specified.
+ */
 static int main_extroot(int argc, char **argv)
 {
 	struct probe_info *pr;
@@ -1601,6 +1616,7 @@ static int main_extroot(int argc, char **argv)
        }
 #endif
 
+	/* As a last resort look for /etc/config/fstab on "rootfs" partition */
 	return mount_extroot(NULL);
 }
 
