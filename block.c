@@ -1316,8 +1316,7 @@ static int find_block_ubi_RO(libubi_t libubi, char *name, char *part, int plen)
 
 	return err;
 }
-
-#else
+#endif
 
 static int find_root_dev(char *buf, int len)
 {
@@ -1347,8 +1346,6 @@ static int find_root_dev(char *buf, int len)
 	closedir(d);
 	return -1;
 }
-
-#endif
 
 static int test_fs_support(const char *name)
 {
@@ -1392,26 +1389,25 @@ static int check_extroot(char *path)
 	char devpath[32];
 	char tag[64];
 	FILE *fp;
+	int err;
 
+	err = find_block_mtd("\"rootfs\"", devpath, sizeof(devpath));
 #ifdef UBIFS_EXTROOT
-	if (find_block_mtd("\"rootfs\"", devpath, sizeof(devpath))) {
-		int err = -1;
+	if (err) {
 		libubi_t libubi;
 
 		libubi = libubi_open();
 		err = find_block_ubi_RO(libubi, "rootfs", devpath, sizeof(devpath));
 		libubi_close(libubi);
-		if (err)
-			return -1;
-	}
-#else
-	if (find_block_mtd("\"rootfs\"", devpath, sizeof(devpath))) {
-		if (find_root_dev(devpath, sizeof(devpath))) {
-			ULOG_ERR("extroot: unable to determine root device\n");
-			return -1;
-		}
 	}
 #endif
+	if (err) {
+		err = find_root_dev(devpath, sizeof(devpath));
+	}
+	if (err) {
+		ULOG_ERR("extroot: unable to determine root device\n");
+		return -1;
+	}
 
 	/* Find root device probe_info so we know its UUID */
 	list_for_each_entry(tmp, &devices, list) {
