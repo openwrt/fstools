@@ -25,6 +25,11 @@
 #define AUTOFS_TIMEOUT		30
 #define AUTOFS_EXPIRE_TIMER	(5 * 1000)
 
+struct hotplug_context {
+	struct uloop_process process;
+	void *priv;
+};
+
 struct device {
 	struct vlist_node node;
 	struct blob_attr *msg;
@@ -108,15 +113,53 @@ block(char *cmd, char *action, char *device)
 	return ret;
 }
 
-static void
-device_free(struct device *device)
+static int hotplug_call_mount(const char *action, const char *devname,
+			      uloop_process_handler cb, void *priv)
 {
+	char * const argv[] = { "hotplug-call", "mount", NULL };
+	struct hotplug_context *c = NULL;
+	pid_t pid;
+	int err;
+
+	if (cb) {
+		c = calloc(1, sizeof(*c));
+		if (!c)
+			return -ENOMEM;
+	}
+
+	pid = fork();
+	switch (pid) {
+	case -1:
+		err = -errno;
+		ULOG_ERR("fork() failed\n");
+		return err;
+	case 0:
+		uloop_end();
+
+		setenv("ACTION", action, 1);
+		setenv("DEVICE", devname, 1);
+
+		execv("/sbin/hotplug-call", argv);
+		exit(-1);
+		break;
+	default:
+		if (c) {
+			c->process.pid = pid;
+			c->process.cb = cb;
+			c->priv = priv;
+			uloop_process_add(&c->process);
+		}
+		break;
+	}
+
+	return 0;
+}
+
+static void device_mount_remove_hotplug_cb(struct uloop_process *p, int stat)
+{
+	struct hotplug_context *hctx = container_of(p, struct hotplug_context, process);
+	struct device *device = hctx->priv;
 	char *mp;
-
-	if (!device->autofs)
-		return;
-
-	block("autofs", "unavailable", device->name);
 
 	if (device->target)
 		unlink(device->target);
@@ -126,16 +169,21 @@ device_free(struct device *device)
 		block("autofs", "remove", device->name);
 		free(mp);
 	}
+
+	free(device);
+	free(hctx);
 }
 
-static void
-device_add(struct device *device)
+static void device_mount_remove(struct device *device)
+{
+	hotplug_call_mount("remove", device->name,
+			   device_mount_remove_hotplug_cb, device);
+}
+
+static void device_mount_add(struct device *device)
 {
 	struct stat st;
 	char path[64];
-
-	if (!device->autofs)
-		return;
 
 	snprintf(path, sizeof(path), "/tmp/run/blockd/%s", device->name);
 	if (!lstat(device->target, &st)) {
@@ -147,7 +195,7 @@ device_add(struct device *device)
 	if (symlink(path, device->target))
 		ULOG_ERR("failed to symlink %s->%s (%d) - %m\n", device->target, path, errno);
 	else
-		block("autofs", "available", device->name);
+		hotplug_call_mount("add", device->name, NULL, NULL);
 }
 
 static int
@@ -177,36 +225,13 @@ device_move(struct device *device_o, struct device *device_n)
 	return 0;
 }
 
-static void
-devices_update_cb(struct vlist_tree *tree, struct vlist_node *node_new,
-		  struct vlist_node *node_old)
+static void vlist_nop_update(struct vlist_tree *tree,
+			     struct vlist_node *node_new,
+			     struct vlist_node *node_old)
 {
-	struct device *device_o = NULL, *device_n = NULL;
-
-	if (node_old)
-		device_o = container_of(node_old, struct device, node);
-
-	if (node_new)
-		device_n = container_of(node_new, struct device, node);
-
-	if (device_o && device_n) {
-		if (device_move(device_o, device_n)) {
-			device_free(device_o);
-			device_add(device_n);
-			if (!device_n->autofs)
-				block("mount", NULL, NULL);
-		}
-	} else if (device_n) {
-		device_add(device_n);
-	} else {
-		device_free(device_o);
-	}
-
-	if (device_o)
-		free(device_o);
 }
 
-VLIST_TREE(devices, avl_strcmp, devices_update_cb, false, false);
+VLIST_TREE(devices, avl_strcmp, vlist_nop_update, false, false);
 
 static int
 block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
@@ -246,22 +271,35 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 
 	if (data[MOUNT_REMOVE]) {
 		vlist_delete(&devices, &device->node);
+
+		if (device->autofs)
+			device_mount_remove(device);
+		else
+			free(device);
 	} else {
-		if (data[MOUNT_AUTOFS])
-			device->autofs = blobmsg_get_u32(data[MOUNT_AUTOFS]);
-		else
-			device->autofs = 0;
-		if (data[MOUNT_ANON])
-			device->anon = blobmsg_get_u32(data[MOUNT_ANON]);
-		else
-			device->anon = 0;
+		struct device *old = vlist_find(&devices, devname, device, node);
+
+		device->autofs = data[MOUNT_AUTOFS] ? blobmsg_get_u32(data[MOUNT_AUTOFS]) : 0;
+		device->anon = data[MOUNT_ANON] ? blobmsg_get_u32(data[MOUNT_ANON]) : 0;
 		device->msg = _msg;
 		memcpy(_msg, msg, blob_raw_len(msg));
 		device->name = _name;
 		strcpy(_name, devname);
 		device->target = __target;
 		strcpy(__target, target);
+
 		vlist_add(&devices, &device->node, device->name);
+
+		if (old && !device_move(old, device)) {
+			if (device->autofs) {
+				device_mount_remove(old);
+				device_mount_add(device);
+			} else {
+				block("mount", NULL, NULL);
+			}
+		} else if (device->autofs) {
+			device_mount_add(device);
+		}
 	}
 
 	return 0;

@@ -1218,10 +1218,6 @@ static int main_autofs(int argc, char **argv)
 
 			blockd_notify(pr->dev, m, pr);
 		}
-	} else if (!strcmp(argv[2], "available")) {
-		err = hotplug_call_mount("add", argv[3]);
-	} else if (!strcmp(argv[2], "unavailable")) {
-		err = hotplug_call_mount("remove", argv[3]);
 	} else {
 		if (argc < 4)
 			return -EINVAL;
