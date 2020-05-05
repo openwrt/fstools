@@ -1386,7 +1386,12 @@ static int test_fs_support(const char *name)
 static int check_extroot(char *path)
 {
 	struct probe_info *pr = NULL;
+	struct probe_info *tmp;
+	struct stat s;
+	char uuid[64] = { 0 };
 	char devpath[32];
+	char tag[64];
+	FILE *fp;
 
 #ifdef UBIFS_EXTROOT
 	if (find_block_mtd("\"rootfs\"", devpath, sizeof(devpath))) {
@@ -1408,53 +1413,53 @@ static int check_extroot(char *path)
 	}
 #endif
 
-	list_for_each_entry(pr, &devices, list) {
-		if (!strcmp(pr->dev, devpath)) {
-			struct stat s;
-			FILE *fp = NULL;
-			char tag[64];
-			char uuid[64] = { 0 };
-
-			snprintf(tag, sizeof(tag), "%s/etc", path);
-			if (stat(tag, &s))
-				mkdir_p(tag);
-
-			snprintf(tag, sizeof(tag), "%s/etc/.extroot-uuid", path);
-			if (stat(tag, &s)) {
-				fp = fopen(tag, "w+");
-				if (!fp) {
-					ULOG_ERR("extroot: failed to write UUID to %s: %d (%m)\n",
-					         tag, errno);
-					/* return 0 to continue boot regardless of error */
-					return 0;
-				}
-				fputs(pr->uuid, fp);
-				fclose(fp);
-				return 0;
-			}
-
-			fp = fopen(tag, "r");
-			if (!fp) {
-				ULOG_ERR("extroot: failed to read UUID from %s: %d (%m)\n",
-				         tag, errno);
-				return -1;
-			}
-
-			if (!fgets(uuid, sizeof(uuid), fp))
-				ULOG_ERR("extroot: failed to read UUID from %s: %d (%m)\n",
-				         tag, errno);
-			fclose(fp);
-
-			if (*uuid && !strcasecmp(uuid, pr->uuid))
-				return 0;
-
-			ULOG_ERR("extroot: UUID mismatch (root: %s, %s: %s)\n",
-			         pr->uuid, basename(path), uuid);
-			return -1;
+	/* Find root device probe_info so we know its UUID */
+	list_for_each_entry(tmp, &devices, list) {
+		if (!strcmp(tmp->dev, devpath)) {
+			pr = tmp;
+			break;
 		}
 	}
+	if (!pr) {
+		ULOG_ERR("extroot: unable to lookup root device %s\n", devpath);
+		return -1;
+	}
 
-	ULOG_ERR("extroot: unable to lookup root device %s\n", devpath);
+	snprintf(tag, sizeof(tag), "%s/etc", path);
+	if (stat(tag, &s))
+		mkdir_p(tag);
+
+	snprintf(tag, sizeof(tag), "%s/etc/.extroot-uuid", path);
+	if (stat(tag, &s)) {
+		fp = fopen(tag, "w+");
+		if (!fp) {
+			ULOG_ERR("extroot: failed to write UUID to %s: %d (%m)\n",
+				 tag, errno);
+			/* return 0 to continue boot regardless of error */
+			return 0;
+		}
+		fputs(pr->uuid, fp);
+		fclose(fp);
+		return 0;
+	}
+
+	fp = fopen(tag, "r");
+	if (!fp) {
+		ULOG_ERR("extroot: failed to read UUID from %s: %d (%m)\n", tag,
+			 errno);
+		return -1;
+	}
+
+	if (!fgets(uuid, sizeof(uuid), fp))
+		ULOG_ERR("extroot: failed to read UUID from %s: %d (%m)\n", tag,
+			 errno);
+	fclose(fp);
+
+	if (*uuid && !strcasecmp(uuid, pr->uuid))
+		return 0;
+
+	ULOG_ERR("extroot: UUID mismatch (root: %s, %s: %s)\n", pr->uuid,
+		 basename(path), uuid);
 	return -1;
 }
 
