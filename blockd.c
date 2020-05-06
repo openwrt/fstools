@@ -69,6 +69,15 @@ static const struct blobmsg_policy mount_policy[__MOUNT_MAX] = {
 	[MOUNT_REMOVE] = { .name = "remove", .type = BLOBMSG_TYPE_INT32 },
 };
 
+enum {
+	INFO_DEVICE,
+	__INFO_MAX
+};
+
+static const struct blobmsg_policy info_policy[__INFO_MAX] = {
+	[INFO_DEVICE] = { .name = "device", .type = BLOBMSG_TYPE_STRING },
+};
+
 static char*
 _find_mount_point(char *device)
 {
@@ -377,35 +386,56 @@ static int blockd_umount(struct ubus_context *ctx, struct ubus_object *obj,
 	return 0;
 }
 
+static void block_info_dump(struct blob_buf *b, struct device *device)
+{
+	struct blob_attr *v;
+	char *mp;
+	int rem;
+
+	blob_for_each_attr(v, device->msg, rem)
+		blobmsg_add_blob(b, v);
+
+	mp = _find_mount_point(device->name);
+	if (mp) {
+		blobmsg_add_string(b, "mount", mp);
+		free(mp);
+	} else if (device->autofs && device->target) {
+		blobmsg_add_string(b, "mount", device->target);
+	}
+}
+
 static int
 block_info(struct ubus_context *ctx, struct ubus_object *obj,
 	   struct ubus_request_data *req, const char *method,
 	   struct blob_attr *msg)
 {
-	struct device *device;
-	void *a;
+	struct blob_attr *data[__INFO_MAX];
+	struct device *device = NULL;
+
+	blobmsg_parse(info_policy, __INFO_MAX, data, blob_data(msg), blob_len(msg));
+
+	if (data[INFO_DEVICE]) {
+		device = vlist_find(&devices, blobmsg_get_string(data[INFO_DEVICE]), device, node);
+		if (!device)
+			return UBUS_STATUS_INVALID_ARGUMENT;
+	}
 
 	blob_buf_init(&bb, 0);
-	a = blobmsg_open_array(&bb, "devices");
-	vlist_for_each_element(&devices, device, node) {
-		void *t = blobmsg_open_table(&bb, "");
-		struct blob_attr *v;
-		char *mp;
-		int rem;
+	if (device) {
+		block_info_dump(&bb, device);
+	} else {
+		void *a;
 
-		blob_for_each_attr(v, device->msg, rem)
-			blobmsg_add_blob(&bb, v);
+		a = blobmsg_open_array(&bb, "devices");
+		vlist_for_each_element(&devices, device, node) {
+			void *t;
 
-		mp = _find_mount_point(device->name);
-		if (mp) {
-			blobmsg_add_string(&bb, "mount", mp);
-			free(mp);
-		} else if (device->autofs && device->target) {
-			blobmsg_add_string(&bb, "mount", device->target);
+			t = blobmsg_open_table(&bb, "");
+			block_info_dump(&bb, device);
+			blobmsg_close_table(&bb, t);
 		}
-		blobmsg_close_table(&bb, t);
+		blobmsg_close_array(&bb, a);
 	}
-	blobmsg_close_array(&bb, a);
 	ubus_send_reply(ctx, req, bb.head);
 
 	return 0;
@@ -415,7 +445,7 @@ static const struct ubus_method block_methods[] = {
 	UBUS_METHOD("hotplug", block_hotplug, mount_policy),
 	UBUS_METHOD("mount", blockd_mount, mount_policy),
 	UBUS_METHOD("umount", blockd_umount, mount_policy),
-	UBUS_METHOD_NOARG("info", block_info),
+	UBUS_METHOD("info", block_info, info_policy),
 };
 
 static struct ubus_object_type block_object_type =
