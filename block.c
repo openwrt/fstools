@@ -886,35 +886,6 @@ static int exec_mount(const char *source, const char *target,
 	return err;
 }
 
-static int hotplug_call_mount(const char *action, const char *device)
-{
-	pid_t pid;
-	int err = 0;
-
-	pid = fork();
-	if (!pid) {
-		char * const argv[] = { "hotplug-call", "mount", NULL };
-
-		setenv("ACTION", action, 1);
-		setenv("DEVICE", device, 1);
-
-		execv("/sbin/hotplug-call", argv);
-		exit(-1);
-	} else if (pid > 0) {
-		int status;
-
-		pid = waitpid(pid, &status, 0);
-		if (pid <= 0 || !WIFEXITED(status) || WEXITSTATUS(status)) {
-			err = -ENOEXEC;
-			ULOG_ERR("hotplug-call call failed\n");
-		}
-	} else {
-		err = -errno;
-	}
-
-	return err;
-}
-
 static int handle_mount(const char *source, const char *target,
                         const char *fstype, struct mount *m)
 {
@@ -966,7 +937,8 @@ static int handle_mount(const char *source, const char *target,
 	return err;
 }
 
-static int blockd_notify(char *device, struct mount *m, struct probe_info *pr)
+static int blockd_notify(const char *method, char *device, struct mount *m,
+			 struct probe_info *pr)
 {
 	struct ubus_context *ctx = ubus_connect(NULL);
 	uint32_t id;
@@ -1019,7 +991,7 @@ static int blockd_notify(char *device, struct mount *m, struct probe_info *pr)
 			blobmsg_add_u32(&buf, "remove", 1);
 		}
 
-		err = ubus_invoke(ctx, id, "hotplug", buf.head, NULL, NULL, 3000);
+		err = ubus_invoke(ctx, id, method, buf.head, NULL, NULL, 3000);
 	} else {
 		err = -ENOENT;
 	}
@@ -1070,7 +1042,7 @@ static int mount_device(struct probe_info *pr, int type)
 	}
 
 	if (type == TYPE_HOTPLUG)
-		blockd_notify(device, m, pr);
+		blockd_notify("hotplug", device, m, pr);
 
 	/* Check if device should be mounted & set the target directory */
 	if (m) {
@@ -1127,7 +1099,7 @@ static int mount_device(struct probe_info *pr, int type)
 	handle_swapfiles(true);
 
 	if (type != TYPE_AUTOFS)
-		hotplug_call_mount("add", device);
+		blockd_notify("mount", device, NULL, NULL);
 
 	return 0;
 }
@@ -1144,7 +1116,7 @@ static int umount_device(char *path, int type, bool all)
 		return 0;
 
 	if (type != TYPE_AUTOFS)
-		hotplug_call_mount("remove", basename(path));
+		blockd_notify("umount", basename(path), NULL, NULL);
 
 	err = umount2(mp, MNT_DETACH);
 	if (err) {
@@ -1169,7 +1141,7 @@ static int mount_action(char *action, char *device, int type)
 
 	if (!strcmp(action, "remove")) {
 		if (type == TYPE_HOTPLUG)
-			blockd_notify(device, NULL, NULL);
+			blockd_notify("hotplug", device, NULL, NULL);
 
 		umount_device(path, type, true);
 
@@ -1208,6 +1180,7 @@ static int main_autofs(int argc, char **argv)
 		cache_load(0);
 		list_for_each_entry(pr, &devices, list) {
 			struct mount *m;
+			char *mp;
 
 			if (!strcmp(pr->type, "swap"))
 				continue;
@@ -1216,7 +1189,11 @@ static int main_autofs(int argc, char **argv)
 			if (m && m->extroot)
 				continue;
 
-			blockd_notify(pr->dev, m, pr);
+			blockd_notify("hotplug", pr->dev, m, pr);
+			if (!m->autofs && (mp = find_mount_point(pr->dev))) {
+				blockd_notify("mount", pr->dev, NULL, NULL);
+				free(mp);
+			}
 		}
 	} else {
 		if (argc < 4)

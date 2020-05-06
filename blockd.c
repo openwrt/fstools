@@ -305,6 +305,78 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 	return 0;
 }
 
+static int blockd_mount(struct ubus_context *ctx, struct ubus_object *obj,
+			struct ubus_request_data *req, const char *method,
+			struct blob_attr *msg)
+{
+	struct blob_attr *data[__MOUNT_MAX];
+	struct device *device;
+	char *devname;
+
+	blobmsg_parse(mount_policy, __MOUNT_MAX, data, blob_data(msg), blob_len(msg));
+
+	if (!data[MOUNT_DEVICE])
+		return UBUS_STATUS_INVALID_ARGUMENT;
+
+	devname = blobmsg_get_string(data[MOUNT_DEVICE]);
+
+	device = vlist_find(&devices, devname, device, node);
+	if (!device)
+		return UBUS_STATUS_UNKNOWN_ERROR;
+
+	hotplug_call_mount("add", device->name, NULL, NULL);
+
+	return 0;
+}
+
+struct blockd_umount_context {
+	struct ubus_context *ctx;
+	struct ubus_request_data req;
+};
+
+static void blockd_umount_hotplug_cb(struct uloop_process *p, int stat)
+{
+	struct hotplug_context *hctx = container_of(p, struct hotplug_context, process);
+	struct blockd_umount_context *c = hctx->priv;
+
+	ubus_complete_deferred_request(c->ctx, &c->req, 0);
+
+	free(c);
+	free(hctx);
+}
+
+static int blockd_umount(struct ubus_context *ctx, struct ubus_object *obj,
+			 struct ubus_request_data *req, const char *method,
+			 struct blob_attr *msg)
+{
+	struct blob_attr *data[__MOUNT_MAX];
+	struct blockd_umount_context *c;
+	char *devname;
+	int err;
+
+	blobmsg_parse(mount_policy, __MOUNT_MAX, data, blob_data(msg), blob_len(msg));
+
+	if (!data[MOUNT_DEVICE])
+		return UBUS_STATUS_INVALID_ARGUMENT;
+
+	devname = blobmsg_get_string(data[MOUNT_DEVICE]);
+
+	c = calloc(1, sizeof(*c));
+	if (!c)
+		return UBUS_STATUS_UNKNOWN_ERROR;
+
+	c->ctx = ctx;
+	ubus_defer_request(ctx, req, &c->req);
+
+	err = hotplug_call_mount("remove", devname, blockd_umount_hotplug_cb, c);
+	if (err) {
+		free(c);
+		return UBUS_STATUS_UNKNOWN_ERROR;
+	}
+
+	return 0;
+}
+
 static int
 block_info(struct ubus_context *ctx, struct ubus_object *obj,
 	   struct ubus_request_data *req, const char *method,
@@ -341,6 +413,8 @@ block_info(struct ubus_context *ctx, struct ubus_object *obj,
 
 static const struct ubus_method block_methods[] = {
 	UBUS_METHOD("hotplug", block_hotplug, mount_policy),
+	UBUS_METHOD("mount", blockd_mount, mount_policy),
+	UBUS_METHOD("umount", blockd_umount, mount_policy),
 	UBUS_METHOD_NOARG("info", block_info),
 };
 
