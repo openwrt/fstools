@@ -1190,7 +1190,7 @@ static int main_autofs(int argc, char **argv)
 				continue;
 
 			blockd_notify("hotplug", pr->dev, m, pr);
-			if (!m->autofs && (mp = find_mount_point(pr->dev))) {
+			if ((!m || !m->autofs) && (mp = find_mount_point(pr->dev))) {
 				blockd_notify("mount", pr->dev, NULL, NULL);
 				free(mp);
 			}
