@@ -231,11 +231,18 @@ static int rootdisk_create_loop(struct rootdev_volume *p)
 		snprintf((char *) info.lo_file_name, sizeof(info.lo_file_name), "%s",
 			 rootdev);
 		info.lo_offset = p->offset;
+		info.lo_flags |= LO_FLAGS_AUTOCLEAR;
 
 		if (ioctl(fd, LOOP_SET_STATUS64, &info) != 0) {
 			ioctl(fd, LOOP_CLR_FD, 0);
 			continue;
 		}
+
+		/*
+		 * Don't close fd. Leave it open until this process exits, to avoid
+		 * the autoclear from happening too soon.
+		 */
+		fd = -1;
 
 		ret = 0;
 		break;
