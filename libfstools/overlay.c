@@ -189,6 +189,7 @@ switch2jffs(struct volume *v)
 		ULOG_ERR("failed - mount -t jffs2 %s %s: %m\n", v->blk, OVERLAYDIR);
 		return -1;
 	}
+	selinux_restorecon(OVERLAYDIR);
 
 	if (mount("none", "/", NULL, MS_NOATIME | MS_REMOUNT, 0)) {
 		ULOG_ERR("failed - mount -o remount,ro none: %m\n");
