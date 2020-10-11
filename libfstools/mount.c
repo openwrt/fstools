@@ -94,7 +94,8 @@ pivot(char *new, char *old)
 int
 fopivot(char *rw_root, char *ro_root)
 {
-	char overlay[64], mount_options[64];
+	char overlay[64], mount_options[64], upperdir[64], workdir[64], upgrade[64], upgrade_dest[64];
+	struct stat st;
 
 	if (find_filesystem("overlay")) {
 		ULOG_ERR("BUG: no suitable fs found\n");
@@ -102,44 +103,29 @@ fopivot(char *rw_root, char *ro_root)
 	}
 
 	snprintf(overlay, sizeof(overlay), "overlayfs:%s", rw_root);
+	snprintf(upperdir, sizeof(upperdir), "%s/upper", rw_root);
+	snprintf(workdir, sizeof(workdir), "%s/work", rw_root);
+	snprintf(upgrade, sizeof(upgrade), "%s/sysupgrade.tgz", rw_root);
+	snprintf(upgrade_dest, sizeof(upgrade_dest), "%s/sysupgrade.tgz", upperdir);
+	snprintf(mount_options, sizeof(mount_options), "lowerdir=/,upperdir=%s,workdir=%s",
+		 upperdir, workdir);
 
 	/*
-	 * First, try to mount without a workdir, for overlayfs v22 and before.
-	 * If it fails, it means that we are probably using a v23 and
-	 * later versions that require a workdir
+	 * Overlay FS v23 and later requires both a upper and
+	 * a work directory, both on the same filesystem, but
+	 * not part of the same subtree.
+	 * We can't really deal with these constraints without
+	 * creating two new subdirectories in /overlay.
 	 */
-	snprintf(mount_options, sizeof(mount_options), "lowerdir=/,upperdir=%s", rw_root);
-	if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, mount_options)) {
-		char upperdir[64], workdir[64], upgrade[64], upgrade_dest[64];
-		struct stat st;
+	mkdir(upperdir, 0755);
+	mkdir(workdir, 0755);
 
-		snprintf(upperdir, sizeof(upperdir), "%s/upper", rw_root);
-		snprintf(workdir, sizeof(workdir), "%s/work", rw_root);
-		snprintf(upgrade, sizeof(upgrade), "%s/sysupgrade.tgz", rw_root);
-		snprintf(upgrade_dest, sizeof(upgrade_dest), "%s/sysupgrade.tgz", upperdir);
-		snprintf(mount_options, sizeof(mount_options), "lowerdir=/,upperdir=%s,workdir=%s",
-			 upperdir, workdir);
+	if (stat(upgrade, &st) == 0)
+	    rename(upgrade, upgrade_dest);
 
-		/*
-		 * Overlay FS v23 and later requires both a upper and
-		 * a work directory, both on the same filesystem, but
-		 * not part of the same subtree.
-		 * We can't really deal with these constraints without
-		 * creating two new subdirectories in /overlay.
-		 */
-		mkdir(upperdir, 0755);
-		mkdir(workdir, 0755);
-
-		if (stat(upgrade, &st) == 0)
-		    rename(upgrade, upgrade_dest);
-
-		/* Mainlined overlayfs has been renamed to "overlay", try that first */
-		if (mount(overlay, "/mnt", "overlay", MS_NOATIME, mount_options)) {
-			if (mount(overlay, "/mnt", "overlayfs", MS_NOATIME, mount_options)) {
-				ULOG_ERR("mount failed: %s, options %m\n", mount_options);
-				return -1;
-			}
-		}
+	if (mount(overlay, "/mnt", "overlay", MS_NOATIME, mount_options)) {
+		ULOG_ERR("mount failed: %s, options %m\n", mount_options);
+		return -1;
 	}
 
 	return pivot("/mnt", ro_root);
