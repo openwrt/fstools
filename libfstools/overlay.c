@@ -35,6 +35,7 @@
 #endif
 
 #define SWITCH_JFFS2 "/tmp/.switch_jffs2"
+#define OVERLAYDIR "/rom/overlay"
 
 static bool keep_sysupgrade;
 
@@ -181,11 +182,11 @@ switch2jffs(struct volume *v)
 		return -1;
 	}
 
-	creat("/tmp/.switch_jffs2", 0600);
-	ret = mount(v->blk, "/rom/overlay", "jffs2", MS_NOATIME, NULL);
-	unlink("/tmp/.switch_jffs2");
+	creat(SWITCH_JFFS2, 0600);
+	ret = mount(v->blk, OVERLAYDIR, "jffs2", MS_NOATIME, NULL);
+	unlink(SWITCH_JFFS2);
 	if (ret) {
-		ULOG_ERR("failed - mount -t jffs2 %s /rom/overlay: %m\n", v->blk);
+		ULOG_ERR("failed - mount -t jffs2 %s %s: %m\n", v->blk, OVERLAYDIR);
 		return -1;
 	}
 
