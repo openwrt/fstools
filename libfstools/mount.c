@@ -121,10 +121,10 @@ fopivot(char *rw_root, char *ro_root)
 	mkdir(workdir, 0755);
 
 	if (stat(upgrade, &st) == 0)
-	    rename(upgrade, upgrade_dest);
+		rename(upgrade, upgrade_dest);
 
 	if (mount(overlay, "/mnt", "overlay", MS_NOATIME, mount_options)) {
-		ULOG_ERR("mount failed: %s, options %m\n", mount_options);
+		ULOG_ERR("mount failed: %m, options %s\n", mount_options);
 		return -1;
 	}
 
