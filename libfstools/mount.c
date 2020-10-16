@@ -99,7 +99,7 @@ selinux_restorecon(char *overlaydir)
 
 	restorecon_pid = fork();
 	if (!restorecon_pid)
-		execl("/sbin/restorecon", "restorecon", overlaydir, (char *) NULL);
+		exit(execl("/sbin/restorecon", "restorecon", overlaydir, (char *) NULL));
 	else if (restorecon_pid > 0)
 		waitpid(restorecon_pid, &status, 0);
 }
