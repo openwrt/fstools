@@ -40,7 +40,7 @@ ask_user(void)
 	return 0;
 }
 
-static int jffs2_reset(struct volume *v, int reset)
+static int jffs2_reset(struct volume *v, int reset, int keep)
 {
 	char *mp;
 
@@ -48,7 +48,7 @@ static int jffs2_reset(struct volume *v, int reset)
 	if (mp) {
 		ULOG_INFO("%s is mounted as %s, only erasing files\n", v->blk, mp);
 		fs_state_set("/overlay", FS_STATE_PENDING);
-		overlay_delete(mp, false);
+		overlay_delete(mp, keep);
 		mount(mp, "/", NULL, MS_REMOUNT, 0);
 	} else {
 		ULOG_INFO("%s is not mounted\n", v->blk);
@@ -93,14 +93,17 @@ static int jffs2_mark(struct volume *v)
 int main(int argc, char **argv)
 {
 	struct volume *v;
-	int ch, yes = 0, reset = 0;
-	while ((ch = getopt(argc, argv, "yr")) != -1) {
+	int ch, yes = 0, reset = 0, keep = 0;
+	while ((ch = getopt(argc, argv, "yrk")) != -1) {
 		switch(ch) {
 		case 'y':
 			yes = 1;
 			break;
 		case 'r':
 			reset = 1;
+			break;
+		case 'k':
+			keep = 1;
 			break;
 		}
 
@@ -128,5 +131,5 @@ int main(int argc, char **argv)
 	volume_init(v);
 	if (!strcmp(*argv, "jffs2mark"))
 		return jffs2_mark(v);
-	return jffs2_reset(v, reset);
+	return jffs2_reset(v, reset, keep);
 }
