@@ -38,11 +38,12 @@
 #include <uci.h>
 #include <uci_blob.h>
 
-#include <libubox/ulog.h>
-#include <libubox/list.h>
-#include <libubox/vlist.h>
-#include <libubox/blobmsg_json.h>
 #include <libubox/avl-cmp.h>
+#include <libubox/blobmsg_json.h>
+#include <libubox/list.h>
+#include <libubox/ulog.h>
+#include <libubox/utils.h>
+#include <libubox/vlist.h>
 #include <libubus.h>
 
 #include "probe.h"
@@ -697,18 +698,6 @@ static int print_block_info(struct probe_info *pr)
 	return 0;
 }
 
-static void mkdir_p(char *dir)
-{
-	char *l = strrchr(dir, '/');
-
-	if (l) {
-		*l = '\0';
-		mkdir_p(dir);
-		*l = '/';
-		mkdir(dir, 0755);
-	}
-}
-
 static void check_filesystem(struct probe_info *pr)
 {
 	pid_t pid;
@@ -1085,7 +1074,7 @@ static int mount_device(struct probe_info *pr, int type)
 	if (check_fs)
 		check_filesystem(pr);
 
-	mkdir_p(target);
+	mkdir_p(target, 0755);
 	if (!lstat(target, &st) && S_ISLNK(st.st_mode))
 		unlink(target);
 
@@ -1396,7 +1385,7 @@ static int check_extroot(char *path)
 
 	snprintf(tag, sizeof(tag), "%s/etc", path);
 	if (stat(tag, &s))
-		mkdir_p(tag);
+		mkdir_p(tag, 0755);
 
 	snprintf(tag, sizeof(tag), "%s/etc/.extroot-uuid", path);
 	if (stat(tag, &s)) {
@@ -1486,7 +1475,7 @@ static int mount_extroot(char *cfg)
 
 		if (m->overlay)
 			path = overlay;
-		mkdir_p(path);
+		mkdir_p(path, 0755);
 
 		if (check_fs)
 			check_filesystem(pr);
@@ -1556,7 +1545,7 @@ static int main_extroot(int argc, char **argv)
 			 * Mount MTD part and try extroot (using
 			 * /etc/config/fstab from that partition)
 			 */
-			mkdir_p(cfg);
+			mkdir_p(cfg, 0755);
 			if (!mount(blkdev_path, cfg, "jffs2", MS_NOATIME, NULL)) {
 				err = mount_extroot(cfg);
 				umount2(cfg, MNT_DETACH);
@@ -1578,7 +1567,7 @@ static int main_extroot(int argc, char **argv)
 		char cfg[] = "/tmp/ubifs_cfg";
 
 		/* Mount volume and try extroot (using fstab from that vol) */
-		mkdir_p(cfg);
+		mkdir_p(cfg, 0755);
 		if (!mount(blkdev_path, cfg, "ubifs", MS_NOATIME, NULL)) {
 			err = mount_extroot(cfg);
 			umount2(cfg, MNT_DETACH);
