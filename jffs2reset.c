@@ -19,12 +19,14 @@
 
 #include <fcntl.h>
 #include <dirent.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <getopt.h>
 
+#include <mtd/ubi-user.h>
 
 #include "libfstools/libfstools.h"
 #include "libfstools/volume.h"
@@ -77,6 +79,13 @@ static int jffs2_mark(struct volume *v)
 	if (!fd) {
 		ULOG_ERR("opening %s failed\n", v->blk);
 		return -1;
+	}
+
+	if (volume_identify(v) == FS_UBIFS) {
+		uint64_t llz = 0;
+		int ret = ioctl(fd, UBI_IOCVOLUP, &llz);
+		close(fd);
+		return ret;
 	}
 
 	sz = write(fd, &deadc0de, sizeof(deadc0de));
