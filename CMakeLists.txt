@@ -6,6 +6,7 @@ ADD_DEFINITIONS(-Os -ggdb -Wall -Werror --std=gnu99 -Wmissing-declarations -Wno-
 SET(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
 
 ADD_LIBRARY(fstools SHARED
+		libfstools/common.c
 		libfstools/snapshot.c
 		libfstools/extroot.c
 		libfstools/overlay.c
@@ -14,6 +15,7 @@ ADD_LIBRARY(fstools SHARED
 		libfstools/mount.c
 		libfstools/ubi.c
 		libfstools/rootdisk.c
+		libfstools/partname.c
 		libfstools/find.c)
 TARGET_LINK_LIBRARIES(fstools ubox)
 INSTALL(TARGETS fstools LIBRARY DESTINATION lib)

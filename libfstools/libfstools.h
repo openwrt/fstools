@@ -29,6 +29,7 @@ enum {
 	FS_UBIFS,
 	FS_F2FS,
 	FS_EXT4,
+	FS_TARGZ,
 };
 
 enum fs_state {

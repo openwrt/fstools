@@ -11,13 +11,7 @@
  * GNU General Public License for more details.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <dirent.h>
-
-#include "libfstools.h"
-#include "volume.h"
+#include "common.h"
 
 /* fit for UBI_MAX_VOLUME_NAME and sysfs path lengths */
 #define BUFLEN		128
@@ -33,56 +27,6 @@ struct ubi_volume {
 };
 
 static struct driver ubi_driver;
-
-static int
-read_uint_from_file(char *dirname, char *filename, unsigned int *i)
-{
-	FILE *f;
-	char fname[BUFLEN];
-	int ret = -1;
-
-	snprintf(fname, sizeof(fname), "%s/%s", dirname, filename);
-
-	f = fopen(fname, "r");
-	if (!f)
-		return ret;
-
-	if (fscanf(f, "%u", i) == 1)
-		ret = 0;
-
-	fclose(f);
-	return ret;
-}
-
-static char
-*read_string_from_file(char *dirname, char *filename)
-{
-	FILE *f;
-	char fname[BUFLEN];
-	char buf[BUFLEN];
-	int i;
-
-	snprintf(fname, sizeof(fname), "%s/%s", dirname, filename);
-
-	f = fopen(fname, "r");
-	if (!f)
-		return NULL;
-
-	if (fgets(buf, sizeof(buf), f) == NULL)
-		return NULL;
-
-	fclose(f);
-
-	/* make sure the string is \0 terminated */
-	buf[sizeof(buf) - 1] = '\0';
-
-	/* remove trailing whitespace */
-	i = strlen(buf) - 1;
-	while (i > 0 && buf[i] <= ' ')
-		buf[i--] = '\0';
-
-	return strdup(buf);
-}
 
 static unsigned int
 test_open(char *filename)
@@ -100,7 +44,7 @@ test_open(char *filename)
 static int ubi_volume_init(struct volume *v)
 {
 	struct ubi_volume *p = container_of(v, struct ubi_volume, v);
-	char voldir[BUFLEN], voldev[BUFLEN], *volname;
+	char voldir[BUFLEN], voldev[BUFLEN], volname[BUFLEN];
 	unsigned int volsize;
 
 	snprintf(voldir, sizeof(voldir), "%s/ubi%u/ubi%u_%u",
@@ -109,8 +53,7 @@ static int ubi_volume_init(struct volume *v)
 	snprintf(voldev, sizeof(voldev), "/dev/ubi%u_%u",
 		p->ubi_num, p->ubi_volid);
 
-	volname = read_string_from_file(voldir, "name");
-	if (!volname)
+	if (!read_string_from_file(voldir, "name", volname, sizeof(volname)))
 		return -1;
 
 	if (read_uint_from_file(voldir, "data_bytes", &volsize))
@@ -126,7 +69,7 @@ static int ubi_volume_init(struct volume *v)
 
 static struct volume *ubi_volume_match(char *name, int ubi_num, int volid)
 {
-	char voldir[BUFLEN], volblkdev[BUFLEN], *volname;
+	char voldir[BUFLEN], volblkdev[BUFLEN], volname[BUFLEN];
 	struct ubi_volume *p;
 
 	snprintf(voldir, sizeof(voldir), "%s/ubi%u/ubi%u_%u",
@@ -141,8 +84,7 @@ static struct volume *ubi_volume_match(char *name, int ubi_num, int volid)
 
 	/* todo: skip existing gluebi device for legacy support */
 
-	volname = read_string_from_file(voldir, "name");
-	if (!volname) {
+	if (!read_string_from_file(voldir, "name", volname, sizeof(volname))) {
 		ULOG_ERR("Couldn't read %s/name\n", voldir);
 		return NULL;
 	}

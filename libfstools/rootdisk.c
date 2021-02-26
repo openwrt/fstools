@@ -11,21 +11,7 @@
  * GNU General Public License for more details.
  */
 
-#define _FILE_OFFSET_BITS 64
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>
-#include <sys/mount.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <unistd.h>
-
-#include "libfstools.h"
-#include "volume.h"
+#include "common.h"
 
 #include <linux/loop.h>
 
@@ -107,20 +93,6 @@ static int get_squashfs(struct squashfs_super_block *sb)
 	return 0;
 }
 
-static bool rootdisk_use_f2fs(struct rootdev_volume *p)
-{
-	uint64_t size = 0;
-	bool ret = false;
-	int fd;
-
-	fd = open(rootdev, O_RDONLY);
-	if (ioctl(fd, BLKGETSIZE64, &size) == 0)
-		ret = size - p->offset > F2FS_MINSIZE;
-	close(fd);
-
-	return ret;
-}
-
 static struct volume *rootdisk_volume_find(char *name)
 {
 	struct squashfs_super_block sb;
@@ -160,30 +132,13 @@ static struct volume *rootdisk_volume_find(char *name)
 static int rootdisk_volume_identify(struct volume *v)
 {
 	struct rootdev_volume *p = container_of(v, struct rootdev_volume, v);
-	int ret = FS_NONE;
-	uint32_t magic = 0;
-	size_t n;
 	FILE *f;
-
+	int ret = FS_NONE;
 	f = fopen(rootdev, "r");
 	if (!f)
 		return ret;
 
-	fseeko(f, p->offset + 0x400, SEEK_SET);
-	n = fread(&magic, sizeof(magic), 1, f);
-	if (n != 1)
-		return -1;
-
-	if (magic == cpu_to_le32(0xF2F52010))
-		ret = FS_F2FS;
-
-	magic = 0;
-	fseeko(f, p->offset + 0x438, SEEK_SET);
-	n = fread(&magic, sizeof(magic), 1, f);
-	if (n != 1)
-		return -1;
-	if ((le32_to_cpu(magic) & 0xffff) == 0xef53)
-		ret = FS_EXT4;
+	ret = block_file_identify(f, p->offset);
 
 	fclose(f);
 
@@ -262,8 +217,6 @@ static int rootdisk_create_loop(struct rootdev_volume *p)
 static int rootdisk_volume_init(struct volume *v)
 {
 	struct rootdev_volume *p = container_of(v, struct rootdev_volume, v);
-	char str[128];
-	int ret = 0;
 
 	if (!p->loop_name[0] && rootdisk_create_loop(p) != 0) {
 		ULOG_ERR("unable to create loop device\n");
@@ -273,19 +226,7 @@ static int rootdisk_volume_init(struct volume *v)
 	v->type = BLOCKDEV;
 	v->blk = p->loop_name;
 
-	switch (rootdisk_volume_identify(v)) {
-	case FS_NONE:
-		ULOG_INFO("rootdisk overlay filesystem has not been formatted yet\n");
-		if (rootdisk_use_f2fs(p))
-			snprintf(str, sizeof(str), "mkfs.f2fs -q -l rootfs_data %s", v->blk);
-		else
-			snprintf(str, sizeof(str), "mkfs.ext4 -q -L rootfs_data %s", v->blk);
-		ret = system(str);
-		break;
-	default:
-		break;
-	}
-	return ret;
+	return block_volume_format(v, p->offset, rootdev);
 }
 
 static struct driver rootdisk_driver = {
