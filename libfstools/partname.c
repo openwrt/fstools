@@ -6,20 +6,33 @@
 
 const char *const block_dir_name = "/sys/class/block";
 
+struct devpath {
+	char prefix[5];
+	char device[11];
+};
+
 struct partname_volume {
 	struct volume v;
-	char devname[16];
-	char parent_devname[16];
+	union {
+		char devpathstr[16];
+		struct devpath devpath;
+	} dev;
+
+	union {
+		char devpathstr[16];
+		struct devpath devpath;
+	} parent_dev;
 };
 
 static struct driver partname_driver;
 
 static int partname_volume_identify(struct volume *v)
 {
+	struct partname_volume *p = container_of(v, struct partname_volume, v);
 	int ret = FS_NONE;
 	FILE *f;
 
-	f = fopen(v->blk, "r");
+	f = fopen(p->dev.devpathstr, "r");
 	if (!f)
 		return ret;
 
@@ -34,23 +47,18 @@ static int partname_volume_init(struct volume *v)
 {
 	struct partname_volume *p = container_of(v, struct partname_volume, v);
 	char voldir[BUFLEN];
-	char voldev[BUFLEN];
-	char pdev[BUFLEN];
 	unsigned int volsize;
 
-	snprintf(voldir, sizeof(voldir), "%s/%s", block_dir_name, p->devname);
+	snprintf(voldir, sizeof(voldir), "%s/%s", block_dir_name, p->dev.devpath.device);
 
 	if (read_uint_from_file(voldir, "size", &volsize))
 		return -1;
 
-	snprintf(voldev, sizeof(voldev), "/dev/%s", p->devname);
-	snprintf(pdev, sizeof(pdev), "/dev/%s", p->parent_devname);
-
 	v->type = BLOCKDEV;
 	v->size = volsize << 9; /* size is returned in sectors of 512 bytes */
-	v->blk = strdup(voldev);
+	v->blk = p->dev.devpathstr;
 
-	return block_volume_format(v, 0, pdev);
+	return block_volume_format(v, 0, p->parent_dev.devpathstr);
 }
 
 /* from procd/utils.c -> should go to libubox */
@@ -140,15 +148,21 @@ static struct volume *partname_volume_find(char *name)
 	devname = strrchr(devname, '/') + 1;
 
 	p = calloc(1, sizeof(*p));
-	strncpy(p->devname, devname, sizeof(p->devname));
-	if (rootdev)
-		strncpy(p->parent_devname, rootdev, sizeof(p->devname));
-	else
-		strncpy(p->parent_devname, rootdevname(devname), sizeof(p->devname));
+	memcpy(p->dev.devpath.prefix, "/dev/", sizeof(p->dev.devpath.prefix));
+	strncpy(p->dev.devpath.device, devname, sizeof(p->dev.devpath.device) - 1);
+	p->dev.devpath.device[sizeof(p->dev.devpath.device)-1] = '\0';
 
-	p->devname[sizeof(p->devname)-1] = '\0';
+	memcpy(p->parent_dev.devpath.prefix, "/dev/", sizeof(p->parent_dev.devpath.prefix));
+	if (rootdev)
+		strncpy(p->parent_dev.devpath.device, rootdev, sizeof(p->parent_dev.devpath.device) - 1);
+	else
+		strncpy(p->parent_dev.devpath.device, rootdevname(devname), sizeof(p->parent_dev.devpath.device) - 1);
+
+	p->parent_dev.devpath.device[sizeof(p->parent_dev.devpath.device)-1] = '\0';
+
 	p->v.drv = &partname_driver;
-	p->v.name = strdup(namebuf);
+	p->v.blk = p->dev.devpathstr;
+	p->v.name = name;
 
 	return &p->v;
 }
