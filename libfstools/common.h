@@ -11,9 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifndef __GLIBC__
-#include <stropts.h>
-#endif
 #include <dirent.h>
 #include <fcntl.h>
 #include <unistd.h>
