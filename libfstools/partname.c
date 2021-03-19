@@ -85,7 +85,7 @@ static char* get_cmdline_val(const char* name, char* out, int len)
 			continue;
 
 		strncpy(out, &sep[1], len);
-		out[len-1] = 0;
+		out[len-1] = '\0';
 		return out;
 	}
 
@@ -119,6 +119,11 @@ static struct volume *partname_volume_find(char *name)
 	int j;
 	bool found = false;
 	glob_t gl;
+
+	if (get_cmdline_val("fstools_ignore_partname", rootparam, sizeof(rootparam))) {
+		if (!strcmp("1", rootparam))
+			return NULL;
+	}
 
 	if (get_cmdline_val("root", rootparam, sizeof(rootparam))) {
 		rootdev = rootdevname(rootparam);
