@@ -316,7 +316,7 @@ jffs2_switch(struct volume *v)
 		foreachdir("/overlay/", handle_whiteout);
 
 		/* try hard to be in sync */
-		ULOG_INFO("syncronizing overlay\n");
+		ULOG_INFO("synchronizing overlay\n");
 		if (system("cp -a /tmp/root/upper/* / 2>/dev/null"))
 			ULOG_ERR("failed to sync jffs2 overlay\n");
 		break;
