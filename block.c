@@ -994,7 +994,7 @@ static int mount_device(struct probe_info *pr, int type)
 {
 	struct mount *m;
 	struct stat st;
-	char _target[32];
+	char *_target = NULL;
 	char *target;
 	char *device;
 	char *mp;
@@ -1053,16 +1053,22 @@ static int mount_device(struct probe_info *pr, int type)
 		}
 
 		if (m->autofs) {
-			snprintf(_target, sizeof(_target), "/tmp/run/blockd/%s", device);
+			if (asprintf(&_target, "/tmp/run/blockd/%s", device) == -1)
+				exit(ENOMEM);
+
 			target = _target;
 		} else if (m->target) {
 			target = m->target;
 		} else {
-			snprintf(_target, sizeof(_target), "/mnt/%s", device);
+			if (asprintf(&_target, "/mnt/%s", device) == -1)
+				exit(ENOMEM);
+
 			target = _target;
 		}
 	} else if (anon_mount) {
-		snprintf(_target, sizeof(_target), "/mnt/%s", device);
+		if (asprintf(&_target, "/mnt/%s", device) == -1)
+			exit(ENOMEM);
+
 		target = _target;
 	} else {
 		/* No reason to mount this device */
@@ -1082,8 +1088,15 @@ static int mount_device(struct probe_info *pr, int type)
 	if (err) {
 		ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
 				pr->dev, pr->type, target, errno);
+
+		if (_target)
+			free(_target);
+
 		return err;
 	}
+
+	if (_target)
+		free(_target);
 
 	handle_swapfiles(true);
 
