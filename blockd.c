@@ -1,4 +1,3 @@
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mount.h>
 #include <sys/wait.h>
@@ -81,11 +80,15 @@ static const struct blobmsg_policy info_policy[__INFO_MAX] = {
 static char*
 _find_mount_point(char *device)
 {
-	char dev[32] = { 0 };
+	char *dev, *mp;
 
-	snprintf(dev, sizeof(dev), "/dev/%s", device);
+	if (asprintf(&dev, "/dev/%s", device) == -1)
+		exit(ENOMEM);
 
-	return find_mount_point(dev, 0);
+	mp = find_mount_point(dev, 0);
+	free(dev);
+
+	return mp;
 }
 
 static int
@@ -192,9 +195,11 @@ static void device_mount_remove(struct device *device)
 static void device_mount_add(struct device *device)
 {
 	struct stat st;
-	char path[64];
+	char *path;
 
-	snprintf(path, sizeof(path), "/tmp/run/blockd/%s", device->name);
+	if (asprintf(&path, "/tmp/run/blockd/%s", device->name) == -1)
+		exit(ENOMEM);
+
 	if (!lstat(device->target, &st)) {
 		if (S_ISLNK(st.st_mode))
 			unlink(device->target);
@@ -205,12 +210,14 @@ static void device_mount_add(struct device *device)
 		ULOG_ERR("failed to symlink %s->%s (%d) - %m\n", device->target, path, errno);
 	else
 		hotplug_call_mount("add", device->name, NULL, NULL);
+
+	free(path);
 }
 
 static int
 device_move(struct device *device_o, struct device *device_n)
 {
-	char path[64];
+	char *path;
 
 	if (device_o->autofs != device_n->autofs)
 		return -1;
@@ -220,9 +227,13 @@ device_move(struct device *device_o, struct device *device_n)
 
 	if (device_o->autofs) {
 		unlink(device_o->target);
-		snprintf(path, sizeof(path), "/tmp/run/blockd/%s", device_n->name);
+		if (asprintf(&path, "/tmp/run/blockd/%s", device_n->name) == -1)
+			exit(ENOMEM);
+
 		if (symlink(path, device_n->target))
 			ULOG_ERR("failed to symlink %s->%s (%d) - %m\n", device_n->target, path, errno);
+
+		free(path);
 	} else {
 		mkdir(device_n->target, 0755);
 		if (mount(device_o->target, device_n->target, NULL, MS_MOVE, NULL))
@@ -252,7 +263,7 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 	struct blob_attr *_msg;
 	char *devname, *_name;
 	char *target = NULL, *__target;
-	char _target[32];
+	char *_target = NULL;
 
 	blobmsg_parse(mount_policy, __MOUNT_MAX, data, blob_data(msg), blob_len(msg));
 
@@ -264,8 +275,10 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 	if (data[MOUNT_TARGET]) {
 		target = blobmsg_get_string(data[MOUNT_TARGET]);
 	} else {
-		snprintf(_target, sizeof(_target), "/mnt/%s",
-			 blobmsg_get_string(data[MOUNT_DEVICE]));
+		if (asprintf(&_target, "/mnt/%s",
+			     blobmsg_get_string(data[MOUNT_DEVICE])) == -1)
+			exit(ENOMEM);
+
 		target = _target;
 	}
 
@@ -275,8 +288,12 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 		device = calloc_a(sizeof(*device), &_msg, blob_raw_len(msg),
 				  &_name, strlen(devname) + 1, &__target, strlen(target) + 1);
 
-	if (!device)
+	if (!device) {
+		if (_target)
+			free(_target);
+
 		return UBUS_STATUS_UNKNOWN_ERROR;
+	}
 
 	if (data[MOUNT_REMOVE]) {
 		vlist_delete(&devices, &device->node);
@@ -285,6 +302,9 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 			device_mount_remove(device);
 		else
 			free(device);
+
+		if (_target)
+			free(_target);
 	} else {
 		struct device *old = vlist_find(&devices, devname, device, node);
 
@@ -296,6 +316,8 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 		strcpy(_name, devname);
 		device->target = __target;
 		strcpy(__target, target);
+		if (_target)
+			free(_target);
 
 		vlist_add(&devices, &device->node, device->name);
 
