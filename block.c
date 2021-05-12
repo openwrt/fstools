@@ -1135,11 +1135,23 @@ static int umount_device(char *path, int type, bool all)
 
 static int mount_action(char *action, char *device, int type)
 {
-	char path[32];
+	char *path = NULL;
+	struct probe_info *pr;
 
 	if (!action || !device)
 		return -1;
-	snprintf(path, sizeof(path), "/dev/%s", device);
+
+	if (config_load(NULL))
+		return -1;
+
+	cache_load(1);
+
+	list_for_each_entry(pr, &devices, list)
+		if (!strcmp(basename(pr->dev), device))
+			path = pr->dev;
+
+	if (!path)
+		return -1;
 
 	if (!strcmp(action, "remove")) {
 		if (type == TYPE_HOTPLUG)
@@ -1153,10 +1165,6 @@ static int mount_action(char *action, char *device, int type)
 
 		return -1;
 	}
-
-	if (config_load(NULL))
-		return -1;
-	cache_load(0);
 
 	return mount_device(find_block_info(NULL, NULL, path), type);
 }
