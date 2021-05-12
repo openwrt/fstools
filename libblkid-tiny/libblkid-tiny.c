@@ -226,7 +226,6 @@ int probe_block(char *block, struct blkid_struct_probe *pr)
 			DEBUG("probing %s\n", idinfos[i]->name);
 			pr->err = idinfos[i]->probefunc(pr, mag);
 			pr->id = idinfos[i];
-			strcpy(pr->dev, block);
 			if (!pr->err)
 				break;
 		}

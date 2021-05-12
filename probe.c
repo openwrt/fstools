@@ -31,16 +31,14 @@ probe_path_tiny(const char *path)
 	if (probe_block((char *)path, pr) == 0 && pr->id && !pr->err) {
 		info = calloc_a(sizeof(*info),
 		                &type,    strlen(pr->id->name) + 1,
-		                &dev,     strlen(pr->dev)      + 1,
+		                &dev,     strlen(path)         + 1,
 		                &uuid,    strlen(pr->uuid)     + 1,
 		                &label,   strlen(pr->label)    + 1,
 		                &version, strlen(pr->version)  + 1);
 
 		if (info) {
 			info->type = strcpy(type, pr->id->name);
-
-			if (pr->dev[0])
-				info->dev = strcpy(dev, pr->dev);
+			info->dev = strcpy(dev, path);
 
 			if (pr->uuid[0])
 				info->uuid = strcpy(uuid, pr->uuid);
