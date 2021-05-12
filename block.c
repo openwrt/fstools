@@ -1187,7 +1187,7 @@ static int main_autofs(int argc, char **argv)
 		if (config_load(NULL))
 			return -1;
 
-		cache_load(0);
+		cache_load(1);
 		list_for_each_entry(pr, &devices, list) {
 			struct mount *m;
 			char *mp;
@@ -1630,7 +1630,7 @@ static int main_umount(int argc, char **argv)
 
 	handle_swapfiles(false);
 
-	cache_load(0);
+	cache_load(1);
 
 	if (argc == 3)
 		all = !strcmp(argv[2], "-a");
