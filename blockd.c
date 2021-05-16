@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <sys/stat.h>
 #include <sys/mount.h>
 #include <sys/wait.h>
