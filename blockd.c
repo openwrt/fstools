@@ -89,6 +89,15 @@ _find_mount_point(char *device)
 	mp = find_mount_point(dev, 0);
 	free(dev);
 
+	if (mp)
+		return mp;
+
+	if (asprintf(&dev, "/dev/mapper/%s", device) == -1)
+		exit(ENOMEM);
+
+	mp = find_mount_point(dev, 0);
+	free(dev);
+
 	return mp;
 }
 
@@ -584,8 +593,8 @@ static int autofs_mount(void)
 
 	uloop_timeout_set(&autofs_expire_timer, AUTOFS_EXPIRE_TIMER);
 
-        fcntl(fd_autofs_write, F_SETFD, fcntl(fd_autofs_write, F_GETFD) | FD_CLOEXEC);
-        fcntl(fd_autofs_read.fd, F_SETFD, fcntl(fd_autofs_read.fd, F_GETFD) | FD_CLOEXEC);
+	fcntl(fd_autofs_write, F_SETFD, fcntl(fd_autofs_write, F_GETFD) | FD_CLOEXEC);
+	fcntl(fd_autofs_read.fd, F_SETFD, fcntl(fd_autofs_read.fd, F_GETFD) | FD_CLOEXEC);
 
 	return 0;
 }
