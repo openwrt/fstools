@@ -1171,7 +1171,28 @@ static int mount_action(char *action, char *device, int type)
 
 static int main_hotplug(int argc, char **argv)
 {
-	return mount_action(getenv("ACTION"), getenv("DEVNAME"), TYPE_HOTPLUG);
+	char *devname = getenv("DEVNAME");
+
+	/* resolve device mapper name for dm-* if possible */
+	if (devname && strlen(devname) >= 2 && !strncmp(devname, "dm-", 3)) {
+		char *dmdevnamep;
+		char dmname[256];
+
+		if (asprintf(&dmdevnamep, "/sys/%s/dm/name", getenv("DEVPATH")) == -1)
+			exit(ENOMEM);
+
+		FILE *fp = fopen(dmdevnamep, "r");
+		free(dmdevnamep);
+
+		if (fp) {
+			if (fgets(dmname, sizeof(dmname), fp))
+				devname = dmname;
+
+			fclose(fp);
+		}
+	}
+
+	return mount_action(getenv("ACTION"), devname, TYPE_HOTPLUG);
 }
 
 static int main_autofs(int argc, char **argv)
