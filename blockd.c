@@ -499,15 +499,18 @@ static int send_block_notification(struct ubus_context *ctx, const char *action,
 			    const char *devname)
 {
 	struct blob_buf buf = { 0 };
+	char evname[16] = "mount.";
 	int err;
 
 	if (!ctx)
 		return -ENXIO;
 
+	strncat(evname, action, sizeof(evname) - 1);
+
 	blob_buf_init(&buf, 0);
 	blobmsg_add_string(&buf, "devname", devname);
 
-	err = ubus_notify(ctx, &block_object, action, buf.head, -1);
+	err = ubus_notify(ctx, &block_object, evname, buf.head, -1);
 
 	return err;
 }
