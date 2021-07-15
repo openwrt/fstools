@@ -635,6 +635,9 @@ struct uloop_timeout startup = {
 
 int main(int argc, char **argv)
 {
+	/* make sure blockd is in it's own POSIX process group */
+	setpgrp();
+
 	ulog_open(ULOG_SYSLOG | ULOG_STDIO, LOG_DAEMON, "blockd");
 	uloop_init();
 
