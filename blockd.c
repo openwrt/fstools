@@ -209,7 +209,7 @@ static void device_mount_remove(struct ubus_context *ctx, struct device *device)
 static void device_mount_add(struct ubus_context *ctx, struct device *device)
 {
 	struct stat st;
-	char *path;
+	char *path, *tmp;
 
 	if (asprintf(&path, "/tmp/run/blockd/%s", device->name) == -1)
 		exit(ENOMEM);
@@ -220,6 +220,14 @@ static void device_mount_add(struct ubus_context *ctx, struct device *device)
 		else if (S_ISDIR(st.st_mode))
 			rmdir(device->target);
 	}
+
+	tmp = strrchr(device->target, '/');
+	if (tmp && tmp != device->target && tmp != &device->target[strlen(path)-1]) {
+		*tmp = '\0';
+		mkdir_p(device->target, 0755);
+		*tmp = '/';
+	}
+
 	if (symlink(path, device->target))
 		ULOG_ERR("failed to symlink %s->%s (%d) - %m\n", device->target, path, errno);
 	else
