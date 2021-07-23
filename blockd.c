@@ -89,15 +89,6 @@ _find_mount_point(char *device)
 	mp = find_mount_point(dev, 0);
 	free(dev);
 
-	if (mp)
-		return mp;
-
-	if (asprintf(&dev, "/dev/mapper/%s", device) == -1)
-		exit(ENOMEM);
-
-	mp = find_mount_point(dev, 0);
-	free(dev);
-
 	return mp;
 }
 
