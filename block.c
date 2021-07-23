@@ -1141,6 +1141,19 @@ static int mount_action(char *action, char *device, int type)
 	if (!action || !device)
 		return -1;
 
+	if (!strcmp(action, "remove")) {
+		if (type == TYPE_HOTPLUG)
+			blockd_notify("hotplug", device, NULL, NULL);
+
+		umount_device(device, type, true);
+
+		return 0;
+	} else if (strcmp(action, "add")) {
+		ULOG_ERR("Unkown action %s\n", action);
+
+		return -1;
+	}
+
 	if (config_load(NULL))
 		return -1;
 
@@ -1152,19 +1165,6 @@ static int mount_action(char *action, char *device, int type)
 
 	if (!path)
 		return -1;
-
-	if (!strcmp(action, "remove")) {
-		if (type == TYPE_HOTPLUG)
-			blockd_notify("hotplug", device, NULL, NULL);
-
-		umount_device(path, type, true);
-
-		return 0;
-	} else if (strcmp(action, "add")) {
-		ULOG_ERR("Unkown action %s\n", action);
-
-		return -1;
-	}
 
 	return mount_device(find_block_info(NULL, NULL, path), type);
 }
