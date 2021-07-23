@@ -574,7 +574,7 @@ struct uloop_timeout autofs_expire_timer = {
 
 static int autofs_mount(void)
 {
-	int autofs_timeout = AUTOFS_TIMEOUT;
+	unsigned long autofs_timeout = AUTOFS_TIMEOUT;
 	int kproto_version;
 	int pipefd[2];
 	char source[64];
