@@ -533,7 +533,7 @@ static void cache_load(int mtd)
 	_cache_load("/dev/nvme*");
 	_cache_load("/dev/vd*");
 	_cache_load("/dev/xvd*");
-	_cache_load("/dev/mapper/*");
+	_cache_load("/dev/dm-*");
 }
 
 
