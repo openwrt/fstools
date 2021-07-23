@@ -1108,10 +1108,19 @@ static int mount_device(struct probe_info *pr, int type)
 
 static int umount_device(char *path, int type, bool all)
 {
-	char *mp;
+	char *mp, *devpath;
 	int err;
 
-	mp = find_mount_point(path);
+	if (strlen(path) > 5 && !strncmp("/dev/", path, 5)) {
+		mp = find_mount_point(path);
+	} else {
+		devpath = malloc(strlen(path) + 6);
+		strcpy(devpath, "/dev/");
+		strcat(devpath, path);
+		mp = find_mount_point(devpath);
+		free(devpath);
+	}
+
 	if (!mp)
 		return -1;
 	if (!strcmp(mp, "/") && !all)
