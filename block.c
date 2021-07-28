@@ -483,19 +483,27 @@ static int config_load(char *cfg)
 
 static struct probe_info* _probe_path(char *path)
 {
-	struct probe_info *pr;
+	struct probe_info *pr, *epr;
 	char tmppath[64];
 
-	/* skip ubi device if ubiblock device is present */
+	pr = probe_path(path);
+	if (!pr)
+		return NULL;
+
 	if (path[5] == 'u' && path[6] == 'b' && path[7] == 'i' &&
 	    path[8] >= '0' && path[8] <= '9' ) {
+		/* skip ubi device if not UBIFS (as it requires ubiblock) */
+		if (strcmp("ubifs", pr->type))
+			return NULL;
+
+		/* skip ubi device if ubiblock device is present */
 		snprintf(tmppath, sizeof(tmppath), "/dev/ubiblock%s", path + 8);
-		list_for_each_entry(pr, &devices, list)
-			if (!strcasecmp(pr->dev, tmppath))
+		list_for_each_entry(epr, &devices, list)
+			if (!strcmp(epr->dev, tmppath))
 				return NULL;
 	}
 
-	return probe_path(path);
+	return pr;
 }
 
 static int _cache_load(const char *path)
