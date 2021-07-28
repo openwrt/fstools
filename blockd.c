@@ -507,7 +507,9 @@ static int send_block_notification(struct ubus_context *ctx, const char *action,
 	strncat(evname, action, sizeof(evname) - 1);
 
 	blob_buf_init(&buf, 0);
-	blobmsg_add_string(&buf, "devname", devname);
+
+	if (devname)
+		blobmsg_add_string(&buf, "devname", devname);
 
 	err = ubus_notify(ctx, &block_object, evname, buf.head, -1);
 
@@ -626,6 +628,7 @@ static int autofs_mount(void)
 static void blockd_startup(struct uloop_timeout *t)
 {
 	block("autofs", "start", NULL);
+	send_block_notification(&conn.ctx, "ready", NULL);
 }
 
 struct uloop_timeout startup = {
