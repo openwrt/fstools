@@ -93,10 +93,10 @@ _find_mount_point(char *device)
 }
 
 static int
-block(char *cmd, char *action, char *device)
+block(char *cmd, char *action, char *device, int sync, struct uloop_process *process)
 {
 	pid_t pid = fork();
-	int ret = -1;
+	int ret = sync;
 	int status;
 	char *argv[5] = { 0 };
 	int a = 0;
@@ -107,6 +107,8 @@ block(char *cmd, char *action, char *device)
 		break;
 
 	case 0:
+		uloop_end();
+
 		argv[a++] = "/sbin/block";
 		argv[a++] = cmd;
 		argv[a++] = action;
@@ -116,10 +118,15 @@ block(char *cmd, char *action, char *device)
 		exit(EXIT_FAILURE);
 
 	default:
-		waitpid(pid, &status, 0);
-		ret = WEXITSTATUS(status);
-		if (ret)
-			ULOG_ERR("failed to run block. %s/%s\n", action, device);
+		if (!sync && process) {
+			process->pid = pid;
+			uloop_process_add(process);
+		} else if (sync) {
+			waitpid(pid, &status, 0);
+			ret = WEXITSTATUS(status);
+			if (ret)
+				ULOG_ERR("failed to run block. %s/%s\n", action, device);
+		}
 		break;
 	}
 
@@ -183,7 +190,7 @@ static void device_mount_remove_hotplug_cb(struct uloop_process *p, int stat)
 
 	mp = _find_mount_point(device->name);
 	if (mp) {
-		block("autofs", "remove", device->name);
+		block("autofs", "remove", device->name, 0, NULL);
 		free(mp);
 	}
 
@@ -339,7 +346,7 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 				device_mount_remove(ctx, old);
 				device_mount_add(ctx, device);
 			} else {
-				block("mount", NULL, NULL);
+				block("mount", NULL, NULL, 0, NULL);
 			}
 		} else if (device->autofs) {
 			device_mount_add(ctx, device);
@@ -553,7 +560,7 @@ static void autofs_read_handler(struct uloop_fd *u, unsigned int events)
 	pkt = &pktu.missing_indirect;
         ULOG_ERR("kernel is requesting a mount -> %s\n", pkt->name);
 	if (lstat(pkt->name, &st) == -1)
-		if (block("autofs", "add", (char *)pkt->name))
+		if (block("autofs", "add", (char *)pkt->name, 1, NULL))
 			cmd = AUTOFS_IOC_FAIL;
 
 	if (ioctl(fd_autofs_write, cmd, pkt->wait_queue_token) < 0)
@@ -565,7 +572,7 @@ static void autofs_expire(struct uloop_timeout *t)
 	struct autofs_packet_expire pkt;
 
 	while (ioctl(fd_autofs_write, AUTOFS_IOC_EXPIRE, &pkt) == 0)
-		block("autofs", "remove", pkt.name);
+		block("autofs", "remove", pkt.name, 1, NULL);
 
 	uloop_timeout_set(t, AUTOFS_EXPIRE_TIMER);
 }
@@ -625,10 +632,18 @@ static int autofs_mount(void)
 	return 0;
 }
 
+static void blockd_startup_cb(struct uloop_process *p, int stat)
+{
+	send_block_notification(&conn.ctx, "ready", NULL);
+}
+
+static struct uloop_process startup_process = {
+	.cb = blockd_startup_cb,
+};
+
 static void blockd_startup(struct uloop_timeout *t)
 {
-	block("autofs", "start", NULL);
-	send_block_notification(&conn.ctx, "ready", NULL);
+	block("autofs", "start", NULL, 0, &startup_process);
 }
 
 struct uloop_timeout startup = {
