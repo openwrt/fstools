@@ -38,6 +38,7 @@ ADD_LIBRARY(blkid-tiny SHARED
 		libblkid-tiny/f2fs.c
 		)
 INSTALL(TARGETS blkid-tiny LIBRARY DESTINATION lib)
+INSTALL(FILES libblkid-tiny/libblkid-tiny.h DESTINATION include)
 
 ADD_LIBRARY(ubi-utils STATIC
 		libubi/libubi.c
