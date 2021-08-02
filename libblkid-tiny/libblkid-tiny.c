@@ -196,7 +196,7 @@ int probe_block(char *block, struct blkid_struct_probe *pr)
 
 	pr->err = -1;
 	pr->fd = open(block, O_RDONLY);
-	if (!pr->fd)
+	if (pr->fd == -1)
 		return -1;
 
 	for (i = 0; i < ARRAY_SIZE(idinfos); i++) {
