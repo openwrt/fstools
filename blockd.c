@@ -134,7 +134,7 @@ block(char *cmd, char *action, char *device, int sync, struct uloop_process *pro
 }
 
 static int send_block_notification(struct ubus_context *ctx, const char *action,
-			    const char *devname);
+			    const char *devname, const char *target);
 static int hotplug_call_mount(struct ubus_context *ctx, const char *action,
 			      const char *devname, uloop_process_handler cb, void *priv)
 {
@@ -174,8 +174,6 @@ static int hotplug_call_mount(struct ubus_context *ctx, const char *action,
 		break;
 	}
 
-	send_block_notification(ctx, action, devname);
-
 	return 0;
 }
 
@@ -200,8 +198,12 @@ static void device_mount_remove_hotplug_cb(struct uloop_process *p, int stat)
 
 static void device_mount_remove(struct ubus_context *ctx, struct device *device)
 {
-	hotplug_call_mount(ctx, "remove", device->name,
+	static const char *action = "remove";
+
+	hotplug_call_mount(ctx, action, device->name,
 			   device_mount_remove_hotplug_cb, device);
+
+	send_block_notification(ctx, action, device->name, device->target);
 }
 
 static void device_mount_add(struct ubus_context *ctx, struct device *device)
@@ -226,11 +228,13 @@ static void device_mount_add(struct ubus_context *ctx, struct device *device)
 		*tmp = '/';
 	}
 
-	if (symlink(path, device->target))
+	if (symlink(path, device->target)) {
 		ULOG_ERR("failed to symlink %s->%s (%d) - %m\n", device->target, path, errno);
-	else
-		hotplug_call_mount(ctx, "add", device->name, NULL, NULL);
-
+	} else {
+		static const char *action = "add";
+		hotplug_call_mount(ctx, action, device->name, NULL, NULL);
+		send_block_notification(ctx, action, device->name, device->target);
+	}
 	free(path);
 }
 
@@ -360,6 +364,7 @@ static int blockd_mount(struct ubus_context *ctx, struct ubus_object *obj,
 			struct ubus_request_data *req, const char *method,
 			struct blob_attr *msg)
 {
+	static const char *action = "add";
 	struct blob_attr *data[__MOUNT_MAX];
 	struct device *device;
 	char *devname;
@@ -375,7 +380,8 @@ static int blockd_mount(struct ubus_context *ctx, struct ubus_object *obj,
 	if (!device)
 		return UBUS_STATUS_UNKNOWN_ERROR;
 
-	hotplug_call_mount(ctx, "add", device->name, NULL, NULL);
+	hotplug_call_mount(ctx, action, device->name, NULL, NULL);
+	send_block_notification(ctx, action, device->name, device->target);
 
 	return 0;
 }
@@ -402,7 +408,10 @@ static int blockd_umount(struct ubus_context *ctx, struct ubus_object *obj,
 {
 	struct blob_attr *data[__MOUNT_MAX];
 	struct blockd_umount_context *c;
+	static const char *action = "remove";
 	char *devname;
+	static char oldtarget[PATH_MAX];
+	struct device *device;
 	int err;
 
 	blobmsg_parse(mount_policy, __MOUNT_MAX, data, blob_data(msg), blob_len(msg));
@@ -411,6 +420,11 @@ static int blockd_umount(struct ubus_context *ctx, struct ubus_object *obj,
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	devname = blobmsg_get_string(data[MOUNT_DEVICE]);
+	device = vlist_find(&devices, devname, device, node);
+	if (device) {
+		strncpy(oldtarget, device->target, sizeof(oldtarget)-1);
+		oldtarget[PATH_MAX - 1] = '\0';
+	}
 
 	c = calloc(1, sizeof(*c));
 	if (!c)
@@ -419,11 +433,13 @@ static int blockd_umount(struct ubus_context *ctx, struct ubus_object *obj,
 	c->ctx = ctx;
 	ubus_defer_request(ctx, req, &c->req);
 
-	err = hotplug_call_mount(ctx, "remove", devname, blockd_umount_hotplug_cb, c);
+	err = hotplug_call_mount(ctx, action, devname, blockd_umount_hotplug_cb, c);
 	if (err) {
 		free(c);
 		return UBUS_STATUS_UNKNOWN_ERROR;
 	}
+
+	send_block_notification(ctx, action, devname, oldtarget);
 
 	return 0;
 }
@@ -502,7 +518,7 @@ static struct ubus_object block_object = {
 
 /* send ubus event for successful mounts, useful for procd triggers */
 static int send_block_notification(struct ubus_context *ctx, const char *action,
-			    const char *devname)
+			    const char *devname, const char *target)
 {
 	struct blob_buf buf = { 0 };
 	char evname[16] = "mount.";
@@ -516,7 +532,10 @@ static int send_block_notification(struct ubus_context *ctx, const char *action,
 	blob_buf_init(&buf, 0);
 
 	if (devname)
-		blobmsg_add_string(&buf, "devname", devname);
+		blobmsg_add_string(&buf, "device", devname);
+
+	if (target)
+		blobmsg_add_string(&buf, "target", target);
 
 	err = ubus_notify(ctx, &block_object, evname, buf.head, -1);
 
@@ -634,7 +653,7 @@ static int autofs_mount(void)
 
 static void blockd_startup_cb(struct uloop_process *p, int stat)
 {
-	send_block_notification(&conn.ctx, "ready", NULL);
+	send_block_notification(&conn.ctx, "ready", NULL, NULL);
 }
 
 static struct uloop_process startup_process = {
