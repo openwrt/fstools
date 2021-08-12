@@ -152,6 +152,9 @@ static int hotplug_call_mount(struct ubus_context *ctx, const char *action,
 	pid = fork();
 	switch (pid) {
 	case -1:
+		if (c)
+			free(c);
+
 		err = -errno;
 		ULOG_ERR("fork() failed\n");
 		return err;
