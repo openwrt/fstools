@@ -178,8 +178,8 @@ static int read_data(const char *file, void *buf, int buf_len)
 	((char *)buf)[rd] = '\0';
 
 	/* Make sure all data is read */
-	tmp1 = read(fd, &tmp, 1);
-	if (tmp1 == 1) {
+	tmp1 = read(fd, &tmp, 4);
+	if (tmp1 < 0) {
 		sys_errmsg("cannot read \"%s\"", file);
 		goto out_error;
 	}
@@ -422,11 +422,12 @@ static int vol_node2nums(struct libubi *lib, const char *node, int *dev_num,
 	/* Make sure this UBI volume exists */
 	sprintf(file, lib->ubi_vol, i, minor - 1);
 	fd = open(file, O_RDONLY);
-	if (fd == -1) {
+	if (fd < 0) {
 		errno = ENODEV;
 		return -1;
 	}
 
+	close(fd);
 	*dev_num = i;
 	*vol_id = minor - 1;
 	errno = 0;
@@ -927,9 +928,10 @@ int ubi_probe_node(libubi_t desc, const char *node)
 	/* This is supposdely an UBI volume device node */
 	sprintf(file, lib->ubi_vol, i, minor - 1);
 	fd = open(file, O_RDONLY);
-	if (fd == -1)
+	if (fd < 0)
 		goto out_not_ubi;
 
+	close(fd);
 	return 2;
 
 out_not_ubi:
@@ -1320,7 +1322,7 @@ int ubi_get_vol_info1(libubi_t desc, int dev_num, int vol_id,
 	info->rsvd_bytes = (long long)info->leb_size * info->rsvd_lebs;
 
 	ret = vol_read_data(lib->vol_name, dev_num, vol_id, &info->name,
-			    UBI_VOL_NAME_MAX + 2);
+			    UBI_VOL_NAME_MAX + 1);
 	if (ret < 0)
 		return -1;
 
