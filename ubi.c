@@ -150,9 +150,11 @@ static int main_detach(char *type)
 	err = ubidetach(libubi, mtd);
 	if (err) {
 		ULOG_ERR("cannot detach \"%s\"", mtd);
+		libubi_close(libubi);
 		return -1;
 	}
 
+	libubi_close(libubi);
 	return 0;
 }
 
@@ -193,6 +195,7 @@ static int main_image(char *partition, char *image, char *overlay)
 		err = mtd_find("rootfs_ubi", mtd);
 	if (err) {
 		ULOG_ERR("MTD partition '%s_ubi' not found\n", partition);
+		libubi_close(libubi);
 		return -1;
 	}
 
@@ -202,18 +205,21 @@ static int main_image(char *partition, char *image, char *overlay)
 		err = ubi_find(libubi, "rootfs_ubi", node);
 	if (err) {
 		ULOG_ERR("UBI volume '%s' not found\n", partition);
+		libubi_close(libubi);
 		return -1;
 	}
 
 	err = ubidetach(libubi, mtd);
 	if (err) {
 		ULOG_ERR("cannot detach \"%s\"", mtd);
+		libubi_close(libubi);
 		return -1;
 	}
 
 	err = ubiattach(libubi, mtd);
 	if (err) {
 		ULOG_ERR("cannot attach \"%s\"", mtd);
+		libubi_close(libubi);
 		return -1;
 	}
 
@@ -221,24 +227,28 @@ static int main_image(char *partition, char *image, char *overlay)
 		err = ubirmvol(libubi, node, overlay);
 		if (err) {
 			ULOG_ERR("cannot remove \"%s\"", node);
+			libubi_close(libubi);
 			return -1;
 		}
 	}
 
 	if (volume_find(libubi, partition, volume) < 0) {
 		ULOG_ERR("UBI volume '%s' not found\n", partition);
+		libubi_close(libubi);
 		return -1;
 	}
 
 	err = ubirsvol(libubi, node, partition, s.st_size);
 	if (err) {
 		ULOG_ERR("cannot resize \"%s\"", partition);
+		libubi_close(libubi);
 		return -1;
 	}
 
 	err = ubiupdatevol(libubi, volume, image);
 	if (err) {
 		ULOG_ERR("cannot update \"%s\"", volume);
+		libubi_close(libubi);
 		return -1;
 	}
 
@@ -246,6 +256,7 @@ static int main_image(char *partition, char *image, char *overlay)
 		err = ubimkvol(libubi, node, overlay, 1);
 		if (err) {
 			ULOG_ERR("cannot make \"%s\"", overlay);
+			libubi_close(libubi);
 			return -1;
 		}
 	}
@@ -269,6 +280,7 @@ static int main_info(void)
 
 	if (ubi_get_info(libubi, &info)) {
 		ULOG_ERR("failed to get info\n");
+		libubi_close(libubi);
 		return -1;
 	}
 
