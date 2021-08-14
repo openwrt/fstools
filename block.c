@@ -931,6 +931,8 @@ static int handle_mount(const char *source, const char *target,
 		err = exec_mount(source, target, fstype, mount_opts);
 	}
 
+	free(mount_opts);
+
 	return err;
 }
 
@@ -1131,9 +1133,10 @@ static int umount_device(char *path, int type, bool all)
 
 	if (!mp)
 		return -1;
-	if (!strcmp(mp, "/") && !all)
+	if (!strcmp(mp, "/") && !all) {
+		free(mp);
 		return 0;
-
+	}
 	if (type != TYPE_AUTOFS)
 		blockd_notify("umount", basename(path), NULL, NULL);
 
