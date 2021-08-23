@@ -90,8 +90,12 @@ static bool use_f2fs(struct volume *v, uint64_t offset, const char *bdev)
 	int fd;
 
 	fd = open(bdev, O_RDONLY);
+	if (fd < 0)
+		return false;
+
 	if (ioctl(fd, BLKGETSIZE64, &size) == 0)
 		ret = size - offset > F2FS_MINSIZE;
+
 	close(fd);
 
 	return ret;
