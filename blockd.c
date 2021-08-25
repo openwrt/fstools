@@ -14,6 +14,7 @@
 #include <linux/auto_fs4.h>
 
 #include <libubox/uloop.h>
+#include <libubox/utils.h>
 #include <libubox/vlist.h>
 #include <libubox/ulog.h>
 #include <libubox/avl-cmp.h>
