@@ -36,8 +36,10 @@ char
 	if (!f)
 		return NULL;
 
-	if (fgets(buf, bufsz, f) == NULL)
+	if (fgets(buf, bufsz, f) == NULL) {
+		fclose(f);
 		return NULL;
+	}
 
 	fclose(f);
 
