@@ -61,11 +61,14 @@ static int partname_volume_init(struct volume *v)
 	return block_volume_format(v, 0, p->parent_dev.devpathstr);
 }
 
-/* from procd/utils.c -> should go to libubox */
-static char* get_cmdline_val(const char* name, char* out, int len)
+/* adapted from procd/utils.c -> should go to libubox */
+static char* get_var_from_file(const char* filename, const char* name, char* out, int len)
 {
 	char line[1024], *c, *sptr;
-	int fd = open("/proc/cmdline", O_RDONLY);
+	int fd = open(filename, O_RDONLY);
+	if (fd == -1)
+		return NULL;
+
 	ssize_t r = read(fd, line, sizeof(line) - 1);
 	close(fd);
 
@@ -112,7 +115,7 @@ static char *rootdevname(char *devpath) {
 static struct volume *partname_volume_find(char *name)
 {
 	struct partname_volume *p;
-	char volnamegstr[BUFLEN];
+	char ueventgstr[BUFLEN];
 	char namebuf[BUFLEN];
 	char rootparam[BUFLEN];
 	char *rootdev = NULL, *devname, *tmp;
@@ -120,23 +123,23 @@ static struct volume *partname_volume_find(char *name)
 	bool found = false;
 	glob_t gl;
 
-	if (get_cmdline_val("fstools_ignore_partname", rootparam, sizeof(rootparam))) {
+	if (get_var_from_file("/proc/cmdline", "fstools_ignore_partname", rootparam, sizeof(rootparam))) {
 		if (!strcmp("1", rootparam))
 			return NULL;
 	}
 
-	if (get_cmdline_val("root", rootparam, sizeof(rootparam))) {
+	if (get_var_from_file("/proc/cmdline", "root", rootparam, sizeof(rootparam))) {
 		rootdev = rootdevname(rootparam);
 		/* find partition on same device as rootfs */
-		snprintf(volnamegstr, sizeof(volnamegstr), "%s/%s/*/name", block_dir_name, rootdev);
+		snprintf(ueventgstr, sizeof(ueventgstr), "%s/%s/*/uevent", block_dir_name, rootdev);
 	} else {
 		/* no 'root=' kernel cmdline parameter, find on any block device */
-		snprintf(volnamegstr, sizeof(volnamegstr), "%s/*/name", block_dir_name);
+		snprintf(ueventgstr, sizeof(ueventgstr), "%s/*/uevent", block_dir_name);
 	}
 
-	if (!glob(volnamegstr, GLOB_NOESCAPE, NULL, &gl))
+	if (!glob(ueventgstr, GLOB_NOESCAPE, NULL, &gl))
 		for (j = 0; j < gl.gl_pathc; j++) {
-			if (!read_string_from_file("", gl.gl_pathv[j], namebuf, sizeof(namebuf)))
+			if (!get_var_from_file(gl.gl_pathv[j], "PARTNAME", namebuf, sizeof(namebuf)))
 				continue;
 			if (!strncmp(namebuf, name, sizeof(namebuf))) {
 				found = 1;
