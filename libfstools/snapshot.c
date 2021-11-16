@@ -145,7 +145,7 @@ snapshot_write_file(struct volume *v, int block, char *file, uint32_t seq, uint3
 	}
 
 	in = open(file, O_RDONLY);
-	if (in < 1) {
+	if (in < 0) {
 		ULOG_ERR("failed to open %s\n", file);
 		goto out;
 	}
@@ -161,7 +161,7 @@ snapshot_write_file(struct volume *v, int block, char *file, uint32_t seq, uint3
 	ret = 0;
 
 out:
-	if (in > 0)
+	if (in >= 0)
 		close(in);
 
 	return ret;
@@ -190,7 +190,7 @@ snapshot_read_file(struct volume *v, int block, char *file, uint32_t type)
 		return -1;
 
 	out = open(file, O_WRONLY | O_CREAT, 0700);
-	if (!out) {
+	if (out < 0) {
 		ULOG_ERR("failed to open %s\n", file);
 		return -1;
 	}
@@ -203,10 +203,14 @@ snapshot_read_file(struct volume *v, int block, char *file, uint32_t type)
 		if (hdr.length < len)
 			len = hdr.length;
 
-		if (volume_read(v, buffer, offset, len))
+		if (volume_read(v, buffer, offset, len)) {
+			close(out);
 			return -1;
-		if (write(out, buffer, len) != len)
+		}
+		if (write(out, buffer, len) != len) {
+			close(out);
 			return -1;
+		}
 		offset += len;
 		hdr.length -= len;
 	}
@@ -219,7 +223,7 @@ snapshot_read_file(struct volume *v, int block, char *file, uint32_t type)
 		return 0;
 	}
 
-        block += pad_file_size(v, hdr.length) / v->block_size;
+	block += pad_file_size(v, hdr.length) / v->block_size;
 
 	return block;
 }
@@ -334,7 +338,10 @@ mount_snapshot(struct volume *v)
 		return -1;
 	}
 	foreachdir("/overlay/", handle_whiteout);
-	mkdir("/volatile", 0700);
+	if (mkdir("/volatile", 0700) == -1 && errno != EEXIST) {
+		perror("mkdir");
+		return -1;
+	}
 	_ramoverlay("/rom", "/volatile");
 	mount_move("/rom/volatile", "/volatile", "");
 	mount_move("/rom/rom", "/rom", "");

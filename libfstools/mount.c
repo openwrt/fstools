@@ -143,8 +143,11 @@ fopivot(char *rw_root, char *ro_root)
 	 * We can't really deal with these constraints without
 	 * creating two new subdirectories in /overlay.
 	 */
-	mkdir(upperdir, 0755);
-	mkdir(workdir, 0755);
+	if (mkdir(upperdir, 0755) == -1 && errno != EEXIST)
+		return -1;
+
+	if (mkdir(workdir, 0755) == -1 && errno != EEXIST)
+		return -1;
 
 	if (stat(upgrade, &st) == 0)
 		rename(upgrade, upgrade_dest);

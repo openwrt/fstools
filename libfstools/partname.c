@@ -152,6 +152,9 @@ static struct volume *partname_volume_find(char *name)
 
 	devname = gl.gl_pathv[j];
 	tmp = strrchr(devname, '/');
+	if (!tmp)
+		return NULL;
+
 	*tmp = '\0';
 	devname = strrchr(devname, '/') + 1;
 

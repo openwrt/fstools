@@ -175,14 +175,20 @@ static int
 switch2jffs(struct volume *v)
 {
 	struct stat s;
-	int ret;
+	int ret, fd;
 
 	if (!stat(SWITCH_JFFS2, &s)) {
 		ULOG_ERR("jffs2 switch already running\n");
 		return -1;
 	}
 
-	creat(SWITCH_JFFS2, 0600);
+	fd = creat(SWITCH_JFFS2, 0600);
+	if (fd == -1) {
+		ULOG_ERR("failed - cannot create jffs2 switch mark: %m\n");
+		return -1;
+	}
+	close(fd);
+
 	ret = mount(v->blk, OVERLAYDIR, "jffs2", MS_NOATIME, NULL);
 	unlink(SWITCH_JFFS2);
 	if (ret) {

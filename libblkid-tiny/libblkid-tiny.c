@@ -87,11 +87,15 @@ unsigned char *blkid_probe_get_buffer(blkid_probe pr,
 	memset(bf, 0, sizeof(*bf));
 	bf->data = ((unsigned char *)bf) + sizeof(*bf);
 
-	lseek(pr->fd, off, SEEK_SET);
+	if (lseek(pr->fd, off, SEEK_SET) < 0) {
+		fprintf(stderr, "failed to seek\n");
+		free(bf);
+		return NULL;
+	}
 	ret = read(pr->fd, bf->data, len);
 
 	if (ret != len) {
-		fprintf(stderr, "faile to read blkid\n");
+		fprintf(stderr, "failed to read blkid\n");
 		free(bf);
 		return NULL;
 	}
@@ -212,10 +216,14 @@ int probe_block(char *block, struct blkid_struct_probe *pr)
 			int off = (mag->kboff * 1024) + mag->sboff;
 			char magic[32] = { 0 };
 
-			lseek(pr->fd, off, SEEK_SET);
-			if (read(pr->fd, magic, mag->len) < 0)
+			if (lseek(pr->fd, off, SEEK_SET) < 0) {
+				close(pr->fd);
 				return -1;
-
+			}
+			if (read(pr->fd, magic, mag->len) < 0) {
+				close(pr->fd);
+				return -1;
+			}
 			DEBUG("magic: %s %s %d\n", mag->magic, magic, mag->len);
 			if (!memcmp(mag->magic, magic, mag->len))
 				break;

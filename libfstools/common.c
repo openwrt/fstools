@@ -59,13 +59,17 @@ int block_file_identify(FILE *f, uint64_t offset)
 	uint32_t magic = 0;
 	size_t n;
 
-	fseeko(f, offset, SEEK_SET);
+	if (fseeko(f, offset, SEEK_SET) < 0)
+		return -1;
+
 	n = fread(&magic, sizeof(magic), 1, f);
 	if (magic == cpu_to_le32(0x88b1f)) {
 		return FS_TARGZ;
 	}
 
-	fseeko(f, offset + 0x400, SEEK_SET);
+	if (fseeko(f, offset + 0x400, SEEK_SET) < 0)
+		return -1;
+
 	n = fread(&magic, sizeof(magic), 1, f);
 	if (n != 1)
 		return -1;
@@ -74,7 +78,9 @@ int block_file_identify(FILE *f, uint64_t offset)
 		return FS_F2FS;
 
 	magic = 0;
-	fseeko(f, offset + 0x438, SEEK_SET);
+	if (fseeko(f, offset + 0x438, SEEK_SET) < 0)
+		return -1;
+
 	n = fread(&magic, sizeof(magic), 1, f);
 	if (n != 1)
 		return -1;
