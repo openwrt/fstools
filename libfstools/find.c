@@ -109,6 +109,9 @@ find_mount_point(char *block, int root_only)
 	int rstat;
 	unsigned int minor, major;
 
+	if (!block)
+		return NULL;
+
 	if (!fp)
 		return NULL;
 
