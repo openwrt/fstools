@@ -45,8 +45,7 @@ start(int argc, char *argv[1])
 	}
 
 	/* Check for extroot config in rootfs before even trying rootfs_data */
-	extroot_prefix = "";
-	if (!mount_extroot()) {
+	if (!mount_extroot("")) {
 		ULOG_NOTE("switched to extroot\n");
 		return 0;
 	}

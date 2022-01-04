@@ -23,22 +23,17 @@
 
 #include "libfstools.h"
 
-char const *extroot_prefix = NULL;
-
 /*
  * This will execute "block extroot" and make use of mounted extroot or return
  * an error.
  */
-int mount_extroot(void)
+int mount_extroot(char const *extroot_prefix)
 {
 	char ldlib_path[32];
 	char block_path[32];
 	char kmod_loader[64];
 	struct stat s;
 	pid_t pid;
-
-	if (!extroot_prefix)
-		return -1;
 
 	/* try finding the library directory */
 	snprintf(ldlib_path, sizeof(ldlib_path), "%s/upper/lib", extroot_prefix);

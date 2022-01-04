@@ -39,8 +39,7 @@ enum fs_state {
 	__FS_STATE_LAST = FS_STATE_READY,
 };
 
-extern char const *extroot_prefix;
-extern int mount_extroot(void);
+extern int mount_extroot(char const *extroot_prefix);
 extern int mount_snapshot(struct volume *v);
 extern int mount_overlay(struct volume *v);
 
