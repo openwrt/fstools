@@ -416,6 +416,7 @@ int fs_state_set(const char *dir, enum fs_state state)
 int mount_overlay(struct volume *v)
 {
 	char *mp, *fs_name;
+	int err;
 
 	if (!v)
 		return -1;
@@ -426,7 +427,9 @@ int mount_overlay(struct volume *v)
 		return -1;
 	}
 
-	overlay_mount_fs(v);
+	err = overlay_mount_fs(v);
+	if (err)
+		return err;
 
 	extroot_prefix = "/tmp/overlay";
 	if (!mount_extroot()) {
