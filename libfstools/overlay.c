@@ -431,6 +431,10 @@ int mount_overlay(struct volume *v)
 	if (err)
 		return err;
 
+	/*
+	 * Check for extroot config in overlay (rootfs_data) and if present then
+	 * prefer it over rootfs_data.
+	 */
 	extroot_prefix = "/tmp/overlay";
 	if (!mount_extroot()) {
 		ULOG_INFO("switched to extroot\n");

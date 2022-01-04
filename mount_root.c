@@ -44,11 +44,7 @@ start(int argc, char *argv[1])
 		mount("/dev/root", "/", NULL, MS_NOATIME | MS_REMOUNT, 0);
 	}
 
-	/*
-	 * Before trying to mount and use "rootfs_data" let's check if there is
-	 * extroot configured. Following call will handle reading config from
-	 * the "rootfs_data" on its own.
-	 */
+	/* Check for extroot config in rootfs before even trying rootfs_data */
 	extroot_prefix = "";
 	if (!mount_extroot()) {
 		ULOG_NOTE("switched to extroot\n");
