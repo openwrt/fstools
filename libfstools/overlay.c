@@ -344,16 +344,16 @@ jffs2_switch(struct volume *v)
 	return 0;
 }
 
-static int overlay_mount_fs(struct volume *v)
+static int overlay_mount_fs(struct volume *v, const char *overlay_mp)
 {
 	char *fstype = overlay_fs_name(volume_identify(v));
 
-	if (mkdir("/tmp/overlay", 0755)) {
+	if (mkdir(overlay_mp, 0755)) {
 		ULOG_ERR("failed to mkdir /tmp/overlay: %m\n");
 		return -1;
 	}
 
-	if (mount(v->blk, "/tmp/overlay", fstype,
+	if (mount(v->blk, overlay_mp, fstype,
 #ifdef OVL_MOUNT_FULL_ACCESS_TIME
 		MS_RELATIME,
 #else
@@ -415,6 +415,7 @@ int fs_state_set(const char *dir, enum fs_state state)
 
 int mount_overlay(struct volume *v)
 {
+	const char *overlay_mp = "/tmp/overlay";
 	char *mp, *fs_name;
 	int err;
 
@@ -427,7 +428,7 @@ int mount_overlay(struct volume *v)
 		return -1;
 	}
 
-	err = overlay_mount_fs(v);
+	err = overlay_mount_fs(v, overlay_mp);
 	if (err)
 		return err;
 
@@ -435,21 +436,21 @@ int mount_overlay(struct volume *v)
 	 * Check for extroot config in overlay (rootfs_data) and if present then
 	 * prefer it over rootfs_data.
 	 */
-	if (!mount_extroot("/tmp/overlay")) {
+	if (!mount_extroot(overlay_mp)) {
 		ULOG_INFO("switched to extroot\n");
 		return 0;
 	}
 
-	switch(fs_state_get("/tmp/overlay")) {
+	switch (fs_state_get(overlay_mp)) {
 	case FS_STATE_UNKNOWN:
-		fs_state_set("/tmp/overlay", FS_STATE_PENDING);
-		if (fs_state_get("/tmp/overlay") != FS_STATE_PENDING) {
+		fs_state_set(overlay_mp, FS_STATE_PENDING);
+		if (fs_state_get(overlay_mp) != FS_STATE_PENDING) {
 			ULOG_ERR("unable to set filesystem state\n");
 			break;
 		}
 	case FS_STATE_PENDING:
 		ULOG_INFO("overlay filesystem has not been fully initialized yet\n");
-		overlay_delete("/tmp/overlay", true);
+		overlay_delete(overlay_mp, true);
 		break;
 	case FS_STATE_READY:
 		break;
