@@ -67,7 +67,7 @@ static void mtd_volume_close(struct mtd_volume *p)
 		return;
 
 	close(p->fd);
-	p->fd = 0;
+	p->fd = -1;
 }
 
 static int mtd_volume_load(struct mtd_volume *p)
@@ -76,17 +76,14 @@ static int mtd_volume_load(struct mtd_volume *p)
 	struct mtd_info_user mtdInfo;
 	struct erase_info_user mtdLockInfo;
 
-	if (p->fd) {
-		lseek(p->fd, 0, SEEK_SET);
-		return 0;
-	}
+	if (p->fd >= 0)
+		return (lseek(p->fd, 0, SEEK_SET) == -1);
 
 	if (!p->chr)
 		return -1;
 
 	p->fd = mtd_open(p->chr, 0);
 	if (p->fd < 0) {
-		p->fd = 0;
 		ULOG_ERR("Could not open mtd device: %s\n", p->chr);
 		return -1;
 	}
@@ -167,6 +164,7 @@ static struct volume *mtd_volume_find(char *name)
 	v->name = strdup(name);
 	v->drv = &mtd_driver;
 	p->idx = atoi(idx);
+	p->fd = -1;
 
 	snprintf(buffer, sizeof(buffer), "/dev/mtdblock%s", idx);
 	v->blk = strdup(buffer);
