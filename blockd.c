@@ -349,13 +349,11 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 
 		vlist_add(&devices, &device->node, device->name);
 
-		if (old && !device_move(old, device)) {
-			if (device->autofs) {
-				device_mount_remove(ctx, old);
-				device_mount_add(ctx, device);
-			} else {
+		if (old && device_move(old, device)) {
+			device_mount_remove(ctx, old);
+			device_mount_add(ctx, device);
+			if (!device->autofs)
 				block("mount", NULL, NULL, 0, NULL);
-			}
 		} else if (device->autofs) {
 			device_mount_add(ctx, device);
 		}
