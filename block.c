@@ -481,10 +481,63 @@ static int config_load(char *cfg)
 	return 0;
 }
 
+static bool mtdblock_is_nand(char *mtdnum)
+{
+	char tmppath[64];
+	char buf[16];
+	FILE *fp;
+
+	snprintf(tmppath, sizeof(tmppath) - 1, "/sys/class/mtd/mtd%s/type", mtdnum);
+	fp = fopen(tmppath, "r");
+	if (!fp)
+		return false;
+
+	if (!fgets(buf, sizeof(buf), fp)) {
+		fclose(fp);
+		return false;
+	}
+	fclose(fp);
+	buf[sizeof(buf) - 1] = '\0'; /* make sure buf is 0-terminated */
+	buf[strlen(buf) - 1] = '\0'; /* strip final char (newline) */
+
+	if (strcmp(buf, "nand"))
+		return false;
+
+	/*
+	 * --- CUT HERE ---
+	 * Keep probing rootfs and rootfs_data in the meantime to not break
+	 * devices using JFFS2 on NAND but only trigger the kernel warnings.
+	 * Remove this once all devices using JFFS2 and squashfs directly on
+	 * NAND have been converted to UBI.
+	 */
+	snprintf(tmppath, sizeof(tmppath) - 1, "/sys/class/mtd/mtd%s/name", mtdnum);
+	fp = fopen(tmppath, "r");
+	if (!fp)
+		return false;
+
+	if (!fgets(buf, sizeof(buf), fp)) {
+		fclose(fp);
+		return false;
+	}
+	fclose(fp);
+	buf[sizeof(buf) - 1] = '\0'; /* make sure buf is 0-terminated */
+	buf[strlen(buf) - 1] = '\0'; /* strip final char (newline) */
+
+	/* only return true if name differs from 'rootfs' and 'rootfs_data' */
+	if (strcmp(buf, "rootfs") && strcmp(buf, "rootfs_data"))
+		return true;
+
+	/* --- CUT HERE --- */
+	return false;
+}
+
 static struct probe_info* _probe_path(char *path)
 {
 	struct probe_info *pr, *epr;
 	char tmppath[64];
+
+	if (!strncmp(path, "/dev/mtdblock", 13) && mtdblock_is_nand(path + 13))
+		return NULL;
 
 	pr = probe_path(path);
 	if (!pr)
