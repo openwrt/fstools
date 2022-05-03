@@ -86,24 +86,6 @@ pivot(char *new, char *old)
 	return 0;
 }
 
-void
-selinux_restorecon(char *overlaydir)
-{
-	struct stat s;
-	pid_t restorecon_pid;
-	int status;
-
-	/* on non-SELinux system we don't have /sbin/restorecon, return */
-	if (stat("/sbin/restorecon", &s))
-		return;
-
-	restorecon_pid = fork();
-	if (!restorecon_pid)
-		exit(execl("/sbin/restorecon", "restorecon", overlaydir, (char *) NULL));
-	else if (restorecon_pid > 0)
-		waitpid(restorecon_pid, &status, 0);
-}
-
 /**
  * fopivot - switch to overlay using passed dir as upper one
  *
@@ -128,13 +110,6 @@ fopivot(char *rw_root, char *ro_root)
 	snprintf(upgrade_dest, sizeof(upgrade_dest), "%s/sysupgrade.tgz", upperdir);
 	snprintf(mount_options, sizeof(mount_options), "lowerdir=/,upperdir=%s,workdir=%s",
 		 upperdir, workdir);
-
-	/*
-	 * Initialize SELinux security label on newly created overlay
-	 * filesystem where /upper doesn't yet exist
-	 */
-	if (stat(upperdir, &st))
-		selinux_restorecon(rw_root);
 
 	/*
 	 * Overlay FS v23 and later requires both a upper and
