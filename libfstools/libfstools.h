@@ -62,5 +62,6 @@ extern void overlay_delete(const char *dir, bool keep_sysupgrade);
 
 enum fs_state fs_state_get(const char *dir);
 int fs_state_set(const char *dir, enum fs_state state);
+void selinux_restorecon(char *overlaydir);
 
 #endif
