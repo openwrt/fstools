@@ -117,7 +117,11 @@ int block_volume_format(struct volume *v, uint64_t offset, const char *bdev)
 	switch (volume_identify(v)) {
 	case FS_TARGZ:
 		snprintf(str, sizeof(str), "gzip -cd %s > /tmp/sysupgrade.tar", v->blk);
-		system(str);
+		ret = system(str);
+		if (ret < 0) {
+			ULOG_ERR("failed extracting %s\n", v->blk);
+			break;
+		}
 		/* fall-through */
 	case FS_NONE:
 		ULOG_INFO("overlay filesystem in %s has not been formatted yet\n", v->blk);
