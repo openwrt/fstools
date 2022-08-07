@@ -33,8 +33,6 @@
 #include <sys/wait.h>
 #include <sys/sysmacros.h>
 
-#include <linux/fs.h>
-
 #include <uci.h>
 #include <uci_blob.h>
 
