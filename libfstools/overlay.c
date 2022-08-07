@@ -159,9 +159,9 @@ overlay_mount(struct volume *v, char *fs)
 }
 
 /**
- * move_mount - move mount point to the new root
+ * ovl_move_mount - move mount point to the new root
  */
-static int move_mount(const char *device, const char *mount_point)
+static int ovl_move_mount(const char *device, const char *mount_point)
 {
 	static const char *prefix = "/tmp/root/";
 
@@ -228,7 +228,7 @@ switch2jffs(struct volume *v)
 	 *    doesn't support mounts. Mounting to upper dir don't make overlay
 	 *    /propagate/ files to the target dir.
 	 */
-	foreach_mount(move_mount);
+	foreach_mount(ovl_move_mount);
 
 	return ret;
 }
