@@ -63,9 +63,11 @@ int block_file_identify(FILE *f, uint64_t offset)
 		return -1;
 
 	n = fread(&magic, sizeof(magic), 1, f);
-	if (magic == cpu_to_le32(0x88b1f)) {
+	if (magic == cpu_to_le32(0x88b1f))
 		return FS_TARGZ;
-	}
+
+	if (magic == cpu_to_be32(0xdeadc0de))
+		return FS_DEADCODE;
 
 	if (fseeko(f, offset + 0x400, SEEK_SET) < 0)
 		return -1;
@@ -113,17 +115,53 @@ int block_volume_format(struct volume *v, uint64_t offset, const char *bdev)
 {
 	int ret = 0;
 	char str[128];
+	unsigned int skip_blocks = 0;
+	int fd;
+	__u32 deadc0de;
+	size_t sz;
 
 	switch (volume_identify(v)) {
+	case FS_DEADCODE:
+		/* skip padding */
+		fd = open(v->blk, O_RDONLY);
+		if (fd < 0) {
+			ret = EIO;
+			break;
+		}
+		do {
+			if (lseek(fd, (skip_blocks + 1) * 512, SEEK_SET) == (off_t) -1) {
+				ret = EIO;
+				break;
+			}
+			sz = read(fd, &deadc0de, sizeof(deadc0de));
+			if (sz != sizeof(deadc0de)) {
+				ret = EIO;
+				break;
+			}
+		} while(++skip_blocks <= 512 &&
+			(deadc0de == cpu_to_be32(0xdeadc0de) || deadc0de == 0xffffffff));
+
+		close(fd);
+		if (ret)
+			break;
+
+		/* only try extracting in case gzip header is present */
+		if (deadc0de != cpu_to_le32(0x88b1f))
+			goto do_format;
+
+		/* fall-through */
 	case FS_TARGZ:
-		snprintf(str, sizeof(str), "gzip -cd %s > /tmp/sysupgrade.tar", v->blk);
+		snprintf(str, sizeof(str),
+			 "dd if=%s bs=512 skip=%u 2>/dev/null | gzip -cd > /tmp/sysupgrade.tar 2>/dev/null",
+			 v->blk, skip_blocks);
 		ret = system(str);
 		if (ret < 0) {
-			ULOG_ERR("failed extracting %s\n", v->blk);
+			ULOG_ERR("failed extracting config backup from %s\n", v->blk);
 			break;
 		}
 		/* fall-through */
 	case FS_NONE:
+do_format:
 		ULOG_INFO("overlay filesystem in %s has not been formatted yet\n", v->blk);
 		if (use_f2fs(v, offset, bdev))
 			snprintf(str, sizeof(str), "mkfs.f2fs -q -l rootfs_data %s", v->blk);
