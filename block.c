@@ -934,15 +934,34 @@ static int exec_mount(const char *source, const char *target,
 	return err;
 }
 
+static const char * const ntfs_fs[] = { "ntfs3", "ntfs-3g", "antfs", "ntfs" };
+
 static int handle_mount(const char *source, const char *target,
                         const char *fstype, struct mount *m)
 {
-	int i, err;
 	size_t mount_opts_len;
 	char *mount_opts = NULL, *ptr;
+	const char * const *filesystems;
+	int err = -EINVAL;
+	size_t count;
+	int i;
 
-	err = mount(source, target, fstype, m ? m->flags : 0,
-	            (m && m->options) ? m->options : "");
+	if (!strcmp(fstype, "ntfs")) {
+		filesystems = ntfs_fs;
+		count = ARRAY_SIZE(ntfs_fs);
+	} else {
+		filesystems = &fstype;
+		count = 1;
+	}
+
+	for (i = 0; i < count; i++) {
+		const char *fs = filesystems[i];
+
+		err = mount(source, target, fs, m ? m->flags : 0,
+			    (m && m->options) ? m->options : "");
+		if (!err || errno != ENODEV)
+			break;
+	}
 
 	/* Requested file system type is not available in kernel,
 	   attempt to call mount helper. */
@@ -979,7 +998,13 @@ static int handle_mount(const char *source, const char *target,
 		}
 
 		/* ... and now finally invoke the external mount program */
-		err = exec_mount(source, target, fstype, mount_opts);
+		for (i = 0; i < count; i++) {
+			const char *fs = filesystems[i];
+
+			err = exec_mount(source, target, fs, mount_opts);
+			if (!err)
+				break;
+		}
 	}
 
 	free(mount_opts);
