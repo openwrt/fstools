@@ -18,7 +18,7 @@
 
 /* could use libubi-tiny instead, but already had the code directly reading
  * from sysfs */
-const char *const ubi_dir_name = "/sys/devices/virtual/ubi";
+const char *const ubi_dir_name = "/sys/class/ubi";
 
 struct ubi_volume {
 	struct volume v;
@@ -47,8 +47,8 @@ static int ubi_volume_init(struct volume *v)
 	char voldir[BUFLEN], voldev[BUFLEN], volname[BUFLEN];
 	unsigned int volsize;
 
-	snprintf(voldir, sizeof(voldir), "%s/ubi%u/ubi%u_%u",
-		ubi_dir_name, p->ubi_num, p->ubi_num, p->ubi_volid);
+	snprintf(voldir, sizeof(voldir), "%s/ubi%u_%u",
+		ubi_dir_name, p->ubi_num, p->ubi_volid);
 
 	snprintf(voldev, sizeof(voldev), "/dev/ubi%u_%u",
 		p->ubi_num, p->ubi_volid);
@@ -72,8 +72,8 @@ static struct volume *ubi_volume_match(char *name, int ubi_num, int volid)
 	char voldir[BUFLEN], volblkdev[BUFLEN], volname[BUFLEN];
 	struct ubi_volume *p;
 
-	snprintf(voldir, sizeof(voldir), "%s/ubi%u/ubi%u_%u",
-		ubi_dir_name, ubi_num, ubi_num, volid);
+	snprintf(voldir, sizeof(voldir), "%s/ubi%u_%u",
+		ubi_dir_name, ubi_num, volid);
 
 	snprintf(volblkdev, sizeof(volblkdev), "/dev/ubiblock%u_%u",
 		ubi_num, volid);
