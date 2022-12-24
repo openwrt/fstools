@@ -593,6 +593,7 @@ static void cache_load(int mtd)
 	_cache_load("/dev/vd*");
 	_cache_load("/dev/xvd*");
 	_cache_load("/dev/dm-*");
+	_cache_load("/dev/fit*");
 }
 
 
