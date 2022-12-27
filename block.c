@@ -1646,6 +1646,11 @@ static int main_extroot(int argc, char **argv)
 	/* enable LOG_INFO messages */
 	ulog_threshold(LOG_INFO);
 
+	/* try the currently mounted overlay if exists */
+	err = mount_extroot("/tmp/overlay");
+	if (!err)
+	    return err;
+
 	/*
 	 * Look for "rootfs_data". We will want to mount it and check for
 	 * extroot configuration.
