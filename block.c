@@ -1397,14 +1397,14 @@ static int find_block_ubi_RO(libubi_t libubi, char *name, char *part, int plen)
 }
 #endif
 
-static int find_root_dev(char *buf, int len)
+static int find_dev(const char *path, char *buf, int len)
 {
 	DIR *d;
 	dev_t root;
 	struct stat s;
 	struct dirent *e;
 
-	if (stat("/", &s))
+	if (stat(path, &s))
 		return -1;
 
 	if (!(d = opendir("/dev")))
@@ -1424,6 +1424,15 @@ static int find_root_dev(char *buf, int len)
 
 	closedir(d);
 	return -1;
+}
+
+static int find_root_dev(char *buf, int len)
+{
+	int err = find_dev("/", buf, len);
+	if (err)
+	    err = find_dev("/rom", buf, len);
+
+	return err;
 }
 
 static int test_fs_support(const char *name)
