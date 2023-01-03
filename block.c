@@ -1479,7 +1479,9 @@ static int check_extroot(char *path)
 	FILE *fp;
 	int err;
 
-	err = find_block_mtd("\"rootfs\"", devpath, sizeof(devpath));
+	err = find_root_dev(devpath, sizeof(devpath));
+	if (err)
+		err = find_block_mtd("\"rootfs\"", devpath, sizeof(devpath));
 #ifdef UBIFS_EXTROOT
 	if (err) {
 		libubi_t libubi;
@@ -1489,9 +1491,6 @@ static int check_extroot(char *path)
 		libubi_close(libubi);
 	}
 #endif
-	if (err) {
-		err = find_root_dev(devpath, sizeof(devpath));
-	}
 	if (err) {
 		ULOG_ERR("extroot: unable to determine root device\n");
 		return -1;
