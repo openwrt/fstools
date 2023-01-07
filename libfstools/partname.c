@@ -128,12 +128,12 @@ static struct volume *partname_volume_find(char *name)
 			return NULL;
 	}
 
-	if (get_var_from_file("/proc/cmdline", "root", rootparam, sizeof(rootparam))) {
+	if (get_var_from_file("/proc/cmdline", "root", rootparam, sizeof(rootparam)) && rootparam[0] == '/') {
 		rootdev = rootdevname(rootparam);
 		/* find partition on same device as rootfs */
 		snprintf(ueventgstr, sizeof(ueventgstr), "%s/%s/*/uevent", block_dir_name, rootdev);
 	} else {
-		/* no 'root=' kernel cmdline parameter, find on any block device */
+		/* no useful 'root=' kernel cmdline parameter, find on any block device */
 		snprintf(ueventgstr, sizeof(ueventgstr), "%s/*/uevent", block_dir_name);
 	}
 
