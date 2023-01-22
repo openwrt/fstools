@@ -133,6 +133,19 @@ static struct volume *partname_volume_find(char *name)
 		/* find partition on same device as rootfs */
 		snprintf(ueventgstr, sizeof(ueventgstr), "%s/%s/*/uevent", block_dir_name, rootdev);
 	} else {
+		/*
+		 * Some device may contains a GPT partition named rootfs_data that may not be suitable.
+		 * To save from regression with old implementation that doesn't use fstools_ignore_partname to
+		 * explicitly say that that parname scan should be ignored, make explicit that scanning each
+		 * partition should be done by providing fstools_partname_fallback_scan=1 and skip partname scan
+		 * in every other case.
+		 */
+		if (!get_var_from_file("/proc/cmdline", "fstools_partname_fallback_scan", rootparam, sizeof(rootparam)))
+			return NULL;
+
+		if (!strcmp("1", rootparam))
+			return NULL;
+
 		/* no useful 'root=' kernel cmdline parameter, find on any block device */
 		snprintf(ueventgstr, sizeof(ueventgstr), "%s/*/uevent", block_dir_name);
 	}
