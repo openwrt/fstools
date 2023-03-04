@@ -1479,6 +1479,10 @@ static int check_extroot(char *path)
 	FILE *fp;
 	int err;
 
+	snprintf(tag, sizeof(tag), "%s/etc/.extroot-default", path);
+	if (stat(tag, &s))
+		return 0;
+
 	err = find_root_dev(devpath, sizeof(devpath));
 	if (err) {
 		err = find_block_mtd("\"rootfs\"", devpath, sizeof(devpath));
