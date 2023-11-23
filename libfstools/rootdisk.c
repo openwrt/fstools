@@ -108,10 +108,6 @@ static struct volume *rootdisk_volume_find(char *name)
 	if (!rootdev)
 		return NULL;
 
-	if (strstr(rootdev, "mtdblock") ||
-	    strstr(rootdev, "ubiblock"))
-		return NULL;
-
 	if (get_squashfs(&sb))
 		return NULL;
 

@@ -336,6 +336,7 @@ static int mtd_volume_write(struct volume *v, void *buf, int offset, int length)
 
 static struct driver mtd_driver = {
 	.name = "mtd",
+	.priority = 10,
 	.find = mtd_volume_find,
 	.init = mtd_volume_init,
 	.erase = mtd_volume_erase,

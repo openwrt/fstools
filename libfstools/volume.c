@@ -23,7 +23,16 @@ static LIST_HEAD(drivers);
 void
 volume_register_driver(struct driver *d)
 {
-	list_add(&d->list, &drivers);
+	struct driver *cur, *tmp;
+
+	list_for_each_entry_safe(cur, tmp, &drivers, list) {
+		if (d->priority <= cur->priority)
+			continue;
+
+		_list_add(&d->list, cur->list.prev, &cur->list);
+		return;
+	}
+	list_add_tail(&d->list, &drivers);
 }
 
 struct volume* volume_find(char *name)

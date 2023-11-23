@@ -171,6 +171,7 @@ static int ubi_volume_identify(struct volume *v)
 
 static struct driver ubi_driver = {
 	.name = "ubi",
+	.priority = 20,
 	.find = ubi_volume_find,
 	.init = ubi_volume_init,
 	.identify = ubi_volume_identify,

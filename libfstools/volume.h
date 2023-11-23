@@ -30,6 +30,7 @@ typedef int (*volume_erase_all_t)(struct volume *v);
 
 struct driver {
 	struct list_head	list;
+	unsigned int		priority;
 	char			*name;
 	volume_probe_t		probe;
 	volume_init_t		init;
