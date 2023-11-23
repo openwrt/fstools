@@ -9,6 +9,7 @@ ADD_LIBRARY(fstools SHARED
 		libfstools/common.c
 		libfstools/snapshot.c
 		libfstools/extroot.c
+		libfstools/fit.c
 		libfstools/overlay.c
 		libfstools/volume.c
 		libfstools/mtd.c

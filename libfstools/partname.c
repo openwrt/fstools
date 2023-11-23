@@ -4,8 +4,6 @@
 
 #define BUFLEN 64
 
-const char *const block_dir_name = "/sys/class/block";
-
 struct devpath {
 	char prefix[5];
 	char device[11];
