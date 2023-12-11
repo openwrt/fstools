@@ -199,6 +199,7 @@ static struct volume *partname_volume_find(char *name)
 
 static struct driver partname_driver = {
 	.name = "partname",
+	.priority = 25,
 	.find = partname_volume_find,
 	.init = partname_volume_init,
 	.identify = partname_volume_identify,
