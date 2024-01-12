@@ -28,7 +28,7 @@
  * filesystem.
  */
 static int
-start(int argc, char *argv[1])
+start(int argc, char *argv[3])
 {
 	struct volume *root;
 	struct volume *data = volume_find("rootfs_data");
@@ -40,8 +40,17 @@ start(int argc, char *argv[1])
 	if (!data) {
 		root = volume_find("rootfs");
 		volume_init(root);
-		ULOG_NOTE("mounting /dev/root\n");
-		mount("/dev/root", "/", NULL, MS_NOATIME | MS_REMOUNT, 0);
+		if (argc < 3)
+			ULOG_NOTE("mounting /dev/root\n");
+		else
+			ULOG_NOTE("mounting /dev/root with options %s\n", argv[2]);
+
+		/*
+		 * If present, mount rootfs with passed options.
+		 * Example F2FS filesystem with compress_algorithm option.
+		 */
+		mount("/dev/root", "/", NULL, MS_NOATIME | MS_REMOUNT,
+		      argc < 3 ? 0 : argv[2]);
 	}
 
 	/* Check for extroot config in rootfs before even trying rootfs_data */
