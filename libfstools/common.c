@@ -164,9 +164,9 @@ int block_volume_format(struct volume *v, uint64_t offset, const char *bdev)
 do_format:
 		ULOG_INFO("overlay filesystem in %s has not been formatted yet\n", v->blk);
 		if (use_f2fs(v, offset, bdev))
-			snprintf(str, sizeof(str), "mkfs.f2fs -q -l rootfs_data %s", v->blk);
+			snprintf(str, sizeof(str), "mkfs.f2fs -q -f -l rootfs_data %s", v->blk);
 		else
-			snprintf(str, sizeof(str), "mkfs.ext4 -q -L rootfs_data %s", v->blk);
+			snprintf(str, sizeof(str), "mkfs.ext4 -q -F -L rootfs_data %s", v->blk);
 
 		ret = system(str);
 		break;
