@@ -3,6 +3,7 @@
 #include "common.h"
 
 #define BUFLEN 64
+#define DEVPATHSTR_SIZE 15
 
 static const char *const fit0 = "/dev/fit0";
 static const char *const fitrw = "/dev/fitrw";
@@ -15,7 +16,7 @@ struct devpath {
 struct fit_volume {
 	struct volume v;
 	union {
-		char devpathstr[16];
+		char devpathstr[DEVPATHSTR_SIZE+1];
 		struct devpath devpath;
 	} dev;
 };
@@ -79,7 +80,7 @@ static struct volume *fit_volume_find(char *name)
 	if (!p)
 		return NULL;
 
-	strcpy(p->dev.devpathstr, fname);
+	strncpy(p->dev.devpathstr, fname, DEVPATHSTR_SIZE);
 	p->v.drv = &fit_driver;
 	p->v.blk = p->dev.devpathstr;
 	p->v.name = name;
