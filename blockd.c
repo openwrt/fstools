@@ -3,12 +3,14 @@
 #include <sys/mount.h>
 #include <sys/wait.h>
 
+#include <libgen.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
 
 #include <errno.h>
+#include <glob.h>
 
 #include <linux/limits.h>
 #include <linux/auto_fs4.h>
@@ -662,9 +664,43 @@ static struct uloop_process startup_process = {
 	.cb = blockd_startup_cb,
 };
 
+static void coldplug() {
+	char *env[3], *args[3];
+	glob_t gl;
+	pid_t pid;
+	int i;
+
+	if (glob("/sys/class/block/*", GLOB_NOESCAPE | GLOB_MARK, NULL, &gl))
+		return;
+
+	args[0] = "block";
+	args[1] = "hotplug";
+	args[2] = NULL;
+
+	env[0] = "ACTION=add";
+	env[2] = NULL;
+
+	for (i = 0; i < gl.gl_pathc; ++i) {
+		if (asprintf(&env[1], "DEVNAME=%s", basename(gl.gl_pathv[i])) == -1)
+			continue;
+
+		pid = fork();
+		if (!pid) {
+			execve("/sbin/block", args, env);
+			_exit(EXIT_FAILURE);
+		}
+		if (pid > 0)
+			waitpid(pid, NULL, 0);
+		free(env[1]);
+	}
+
+	globfree(&gl);
+};
+
 static void blockd_startup(struct uloop_timeout *t)
 {
 	block("autofs", "start", NULL, 0, &startup_process);
+	coldplug();
 }
 
 struct uloop_timeout startup = {
