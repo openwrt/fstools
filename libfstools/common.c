@@ -122,6 +122,7 @@ int block_volume_format(struct volume *v, uint64_t offset, const char *bdev)
 
 	switch (volume_identify(v)) {
 	case FS_DEADCODE:
+	case FS_NONE:
 		/* skip padding */
 		fd = open(v->blk, O_RDONLY);
 		if (fd < 0) {
@@ -159,8 +160,6 @@ int block_volume_format(struct volume *v, uint64_t offset, const char *bdev)
 			ULOG_ERR("failed extracting config backup from %s\n", v->blk);
 			break;
 		}
-		/* fall-through */
-	case FS_NONE:
 do_format:
 		ULOG_INFO("overlay filesystem in %s has not been formatted yet\n", v->blk);
 		if (use_f2fs(v, offset, bdev))
