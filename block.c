@@ -1481,7 +1481,7 @@ static int check_extroot(char *path)
 	int err;
 
 	snprintf(tag, sizeof(tag), "%s/etc/.extroot-default", path);
-	if (stat(tag, &s))
+	if (!stat(tag, &s))
 		return 0;
 
 	err = find_root_dev(devpath, sizeof(devpath));
