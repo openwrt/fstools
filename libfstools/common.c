@@ -3,8 +3,7 @@
 #include "common.h"
 #define BUFLEN 128
 
-int
-read_uint_from_file(char *dirname, char *filename, unsigned int *i)
+int read_uint_from_file(char *dirname, char *filename, unsigned int *i)
 {
 	FILE *f;
 	char fname[BUFLEN];
@@ -23,8 +22,7 @@ read_uint_from_file(char *dirname, char *filename, unsigned int *i)
 	return ret;
 }
 
-char
-*read_string_from_file(const char *dirname, const char *filename, char *buf, size_t bufsz)
+char *read_string_from_file(const char *dirname, const char *filename, char *buf, size_t bufsz)
 {
 	FILE *f;
 	char fname[BUFLEN];
@@ -52,6 +50,41 @@ char
 		buf[i--] = '\0';
 
 	return buf;
+}
+
+/* adapted from procd/utils.c -> should go to libubox */
+char *get_var_from_file(const char *filename, const char *name, char *out, int len)
+{
+	char line[1024], *c, *sptr;
+
+	int fd = open(filename, O_RDONLY);
+	if (fd == -1)
+		return NULL;
+
+	ssize_t r = read(fd, line, sizeof(line) - 1);
+	close(fd);
+
+	if (r <= 0)
+		return NULL;
+
+	line[r] = 0;
+
+	for (c = strtok_r(line, " \t\n", &sptr); c;
+			c = strtok_r(NULL, " \t\n", &sptr)) {
+		char *sep = strchr(c, '=');
+		if (sep == NULL)
+			continue;
+
+		ssize_t klen = sep - c;
+		if (strncmp(name, c, klen) || name[klen] != 0)
+			continue;
+
+		strncpy(out, &sep[1], len);
+		out[len-1] = '\0';
+		return out;
+	}
+
+	return NULL;
 }
 
 int block_file_identify(FILE *f, uint64_t offset)

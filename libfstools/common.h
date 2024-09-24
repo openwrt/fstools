@@ -23,6 +23,7 @@
 
 int read_uint_from_file(char *dirname, char *filename, unsigned int *i);
 char *read_string_from_file(const char *dirname, const char *filename, char *buf, size_t bufsz);
+char *get_var_from_file(const char *filename, const char *name, char *out, int len);
 int block_file_identify(FILE *f, uint64_t offset);
 int block_volume_format(struct volume *v, uint64_t offset, const char *bdev);
 
