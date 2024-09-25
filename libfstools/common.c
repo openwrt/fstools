@@ -128,9 +128,19 @@ int block_file_identify(FILE *f, uint64_t offset)
 
 static bool use_f2fs(struct volume *v, uint64_t offset, const char *bdev)
 {
+	char typeparam[BUFLEN];
 	uint64_t size = 0;
 	bool ret = false;
 	int fd;
+
+	if (get_var_from_file("/proc/cmdline", "fstools_overlay_fstype", typeparam, sizeof(typeparam))) {
+		if (!strcmp("f2fs", typeparam))
+			return true;
+		else if (!strcmp("ext4", typeparam))
+			return false;
+		else if (strcmp("auto", typeparam))
+			ULOG_ERR("unsupported overlay filesystem type: %s\n", typeparam);
+	}
 
 	fd = open(bdev, O_RDONLY);
 	if (fd < 0)
