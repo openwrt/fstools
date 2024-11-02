@@ -25,6 +25,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <libgen.h>
 
 #include <mtd/ubi-user.h>
 
@@ -103,6 +104,10 @@ int main(int argc, char **argv)
 {
 	struct volume *v;
 	int ch, yes = 0, reset = 0, keep = 0;
+
+	if (!strcmp(basename(argv[0]), "jffs2reset"))
+		ULOG_ERR("jffs2reset will be deprected, please use factoryreset going forward\n");
+
 	while ((ch = getopt(argc, argv, "yrk")) != -1) {
 		switch(ch) {
 		case 'y':
