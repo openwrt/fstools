@@ -98,7 +98,14 @@ static bool use_f2fs(struct volume *v, uint64_t offset, const char *bdev)
 	uint64_t size = 0;
 	bool ret = false;
 	int fd;
-
+#ifdef CMAKE_BLKDEV_FILESYSTEM_TYPE
+	ULOG_INFO("%s will be formatted as %s\n", v->blk,CMAKE_BLKDEV_FILESYSTEM_TYPE);
+	if (strcmp("EXT4",CMAKE_BLKDEV_FILESYSTEM_TYPE) == 0) {
+		return false;
+	} else if (strcmp("F2FS",CMAKE_BLKDEV_FILESYSTEM_TYPE) == 0) {
+		return true;
+	}
+#endif
 	fd = open(bdev, O_RDONLY);
 	if (fd < 0)
 		return false;
