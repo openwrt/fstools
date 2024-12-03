@@ -22,6 +22,9 @@
 
 #include "libfstools/libfstools.h"
 #include "libfstools/volume.h"
+#include "libfstools/common.h"
+
+#define BUFLEN 64
 
 /*
  * Called in the early (PREINIT) stage, when we immediately need some writable
@@ -30,9 +33,16 @@
 static int
 start(int argc, char *argv[3])
 {
+	char dataparam[BUFLEN];
+	char *dataname = "rootfs_data";
 	struct volume *root;
-	struct volume *data = volume_find("rootfs_data");
+	struct volume *data;
 	struct stat s;
+
+	if (get_var_from_file("/proc/cmdline", "fstools_overlay_name", dataparam, sizeof(dataparam)))
+		dataname = dataparam;
+
+	data = volume_find(dataname);
 
 	if (!getenv("PREINIT") && stat("/tmp/.preinit", &s))
 		return -1;
