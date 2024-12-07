@@ -596,6 +596,15 @@ static void cache_load(int mtd)
 	_cache_load("/dev/fit*");
 }
 
+static int cache_load_dev_by_base_name(const char *name)
+{
+	char fullpath[PATH_MAX];
+	int res = snprintf(fullpath, sizeof(fullpath), "/dev/%s", name);
+	if (res < 0 || res >= PATH_MAX)
+		return -1;
+	_cache_load(fullpath);
+	return 0;
+}
 
 static struct probe_info* find_block_info(char *uuid, char *label, char *path)
 {
@@ -1254,11 +1263,15 @@ static int mount_action(char *action, char *device, int type)
 	if (config_load(NULL))
 		return -1;
 
-	cache_load(1);
+	if (cache_load_dev_by_base_name(device))
+		return -1;
 
-	list_for_each_entry(pr, &devices, list)
-		if (!strcmp(basename(pr->dev), device))
+	list_for_each_entry(pr, &devices, list) {
+		if (!strcmp(basename(pr->dev), device)) {
 			path = pr->dev;
+			break;
+		}
+	}
 
 	if (!path)
 		return -1;
