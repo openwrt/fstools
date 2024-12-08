@@ -758,7 +758,7 @@ static int print_block_info(struct probe_info *pr)
 	return 0;
 }
 
-static void check_filesystem(struct probe_info *pr)
+static void check_filesystem(struct probe_info *pr, char *overlay)
 {
 	pid_t pid;
 	struct stat statbuf;
@@ -767,25 +767,42 @@ static void check_filesystem(struct probe_info *pr)
 	const char *fatfsck = "/usr/sbin/fsck.fat";
 	const char *btrfsck = "/usr/bin/btrfsck";
 	const char *ntfsck = "/usr/bin/ntfsfix";
-	const char *ckfs;
+	const char *fsck;
+	char ckfs[64];
+	char ld_lib[32];
 
 	/* UBIFS does not need stuff like fsck */
 	if (!strncmp(pr->type, "ubifs", 5))
 		return;
 
 	if (!strncmp(pr->type, "vfat", 4)) {
-		ckfs = fatfsck;
+		fsck = fatfsck;
 	} else if (!strncmp(pr->type, "f2fs", 4)) {
-		ckfs = f2fsck;
+		fsck = f2fsck;
 	} else if (!strncmp(pr->type, "ext", 3)) {
-		ckfs = e2fsck;
+		fsck = e2fsck;
 	} else if (!strncmp(pr->type, "btrfs", 5)) {
-		ckfs = btrfsck;
+		fsck = btrfsck;
 	} else if (!strncmp(pr->type, "ntfs", 4)) {
-		ckfs = ntfsck;
+		fsck = ntfsck;
 	} else {
 		ULOG_ERR("check_filesystem: %s is not supported\n", pr->type);
 		return;
+	}
+
+	if (overlay) {
+		snprintf(ckfs, sizeof(ckfs), "%s/upper%s", overlay, fsck);
+		if (stat(ckfs, &statbuf) < 0) {
+			ULOG_WARN("check_filesystem: %s not found\n", ckfs);
+			strcpy(ckfs, fsck);
+		} else {
+			snprintf(ld_lib, sizeof(ld_lib), "%s/upper/usr/lib", overlay);
+			if (!stat(ld_lib, &statbuf) && S_ISDIR(statbuf.st_mode)) {
+				setenv("LD_LIBRARY_PATH", ld_lib, 1);
+			}
+		}
+	} else {
+		strcpy(ckfs, fsck);
 	}
 
 	if (stat(ckfs, &statbuf) < 0) {
@@ -1165,7 +1182,7 @@ static int mount_device(struct probe_info *pr, int type)
 	/* Mount the device */
 
 	if (check_fs)
-		check_filesystem(pr);
+		check_filesystem(pr, NULL);
 
 	mkdir_p(target, 0755);
 	if (!lstat(target, &st) && S_ISLNK(st.st_mode))
@@ -1608,7 +1625,7 @@ static int mount_extroot(char *cfg)
 		mkdir_p(path, 0755);
 
 		if (check_fs)
-			check_filesystem(pr);
+			check_filesystem(pr, cfg);
 
 		err = mount(pr->dev, path, pr->type, m->flags,
 		            (m->options) ? (m->options) : (""));
