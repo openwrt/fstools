@@ -1842,11 +1842,12 @@ static int main_info(int argc, char **argv)
 
 static int swapon_usage(void)
 {
-	fprintf(stderr, "Usage: swapon [-s] [-a] [[-p pri] DEVICE]\n\n"
-		"\tStart swapping on [DEVICE]\n"
-		" -a\tStart swapping on all swap devices\n"
-		" -p pri\tSet priority of swap device\n"
-		" -s\tShow summary\n");
+	fprintf(stderr, "Usage: swapon [-s] [-a] [ [[-p pri] [-d [once|pages]] DEVICE] ]\n\n"
+		"\t\t\tStart swapping on [DEVICE]\n"
+		" -a\t\t\tStart swapping on all swap devices\n"
+		" -p pri\t\t\tSet priority of swap device\n"
+		" -d [once|pages]\tEnable discard, using 'once', 'pages' or both (default) discard policy\n"
+		" -s\t\t\tShow summary\n");
 	return -1;
 }
 
@@ -1862,12 +1863,11 @@ static int main_swapon(int argc, char **argv)
 	struct stat st;
 	int err;
 
-	while ((ch = getopt(argc, argv, "ap:s")) != -1) {
+	while ((ch = getopt(argc, argv, "ap:sd::")) != -1) {
 		switch(ch) {
 		case 's':
 			fp = fopen("/proc/swaps", "r");
 			lineptr = NULL;
-
 			if (!fp) {
 				ULOG_ERR("failed to open /proc/swaps\n");
 				return -1;
@@ -1890,7 +1890,27 @@ static int main_swapon(int argc, char **argv)
 		case 'p':
 			pri = atoi(optarg);
 			if (pri >= 0)
-				flags = ((pri << SWAP_FLAG_PRIO_SHIFT) & SWAP_FLAG_PRIO_MASK) | SWAP_FLAG_PREFER;
+				flags |= ((pri << SWAP_FLAG_PRIO_SHIFT) & SWAP_FLAG_PRIO_MASK) | SWAP_FLAG_PREFER;
+			break;
+		case 'd':
+			lineptr = NULL;
+			flags |= SWAP_FLAG_DISCARD;
+			if (optarg)
+				lineptr = optarg;
+			else if (optind == (argc - 1))
+				break;
+			else if (optind < argc && argv[optind][0] != '-') {
+				lineptr = argv[optind];
+				optind++;
+			}
+			if (lineptr) {
+				if (!strcmp(lineptr, "once"))
+					flags |= SWAP_FLAG_DISCARD_ONCE;
+				else if (!strcmp(lineptr, "pages"))
+					flags |= SWAP_FLAG_DISCARD_PAGES;
+				else
+					return swapon_usage();
+			}
 			break;
 		default:
 			return swapon_usage();
