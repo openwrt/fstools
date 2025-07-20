@@ -1883,7 +1883,7 @@ static int main_swapon(int argc, char **argv)
 			list_for_each_entry(pr, &devices, list) {
 				if (strcmp(pr->type, "swap"))
 					continue;
-				if (swapon(pr->dev, 0))
+				if (swapon(pr->dev, SWAP_FLAG_DISCARD))
 					ULOG_ERR("failed to swapon %s\n", pr->dev);
 			}
 			return 0;
