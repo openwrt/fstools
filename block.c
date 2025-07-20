@@ -153,6 +153,7 @@ enum {
 	SWAP_LABEL,
 	SWAP_DEVICE,
 	SWAP_PRIO,
+	SWAP_DISCARD,
 	__SWAP_MAX
 };
 
@@ -162,6 +163,7 @@ static const struct blobmsg_policy swap_policy[__SWAP_MAX] = {
 	[SWAP_LABEL] = { .name = "label", .type = BLOBMSG_TYPE_STRING },
 	[SWAP_DEVICE] = { .name = "device", .type = BLOBMSG_TYPE_STRING },
 	[SWAP_PRIO] = { .name = "priority", .type = BLOBMSG_TYPE_INT32 },
+	[SWAP_DISCARD] = { .name = "discard", .type = BLOBMSG_TYPE_STRING },
 };
 
 static const struct uci_blob_param_list swap_attr_list = {
@@ -317,6 +319,7 @@ static int swap_add(struct uci_section *s)
 {
 	struct blob_attr *tb[__SWAP_MAX] = { 0 };
 	struct mount *m;
+	char *discard;
 
         blob_buf_init(&b, 0);
 	uci_to_blob(&b, s, &swap_attr_list);
@@ -331,10 +334,22 @@ static int swap_add(struct uci_section *s)
 	m->uuid = blobmsg_get_strdup(tb[SWAP_UUID]);
 	m->label = blobmsg_get_strdup(tb[SWAP_LABEL]);
 	m->device = blobmsg_get_basename(tb[SWAP_DEVICE]);
+	discard = blobmsg_get_strdup(tb[SWAP_DISCARD]);
+
 	if (tb[SWAP_PRIO])
 		m->prio = blobmsg_get_u32(tb[SWAP_PRIO]);
 	if (m->prio)
 		m->prio = ((m->prio << SWAP_FLAG_PRIO_SHIFT) & SWAP_FLAG_PRIO_MASK) | SWAP_FLAG_PREFER;
+
+	if (discard) {
+		if (!strcmp(discard, "yes") || !strcmp(discard, "1") || !strcmp(discard, "on"))
+			 m->prio |= SWAP_FLAG_DISCARD;
+		else if (!strcmp(discard, "pages"))
+			 m->prio |= (SWAP_FLAG_DISCARD | SWAP_FLAG_DISCARD_PAGES);
+		else if (!strcmp(discard, "once"))
+			 m->prio |= (SWAP_FLAG_DISCARD | SWAP_FLAG_DISCARD_ONCE);
+	} else
+		 m->prio |= SWAP_FLAG_DISCARD;
 
 	if ((!tb[SWAP_ENABLE]) || blobmsg_get_u32(tb[SWAP_ENABLE])) {
 		/* store complete swap path */
