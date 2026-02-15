@@ -25,7 +25,7 @@
 
 #include "volume.h"
 
-#define PATH_MAX		256
+#define MTD_PATH_MAX		256
 
 struct mtd_volume {
 	struct volume v;
@@ -39,7 +39,7 @@ static struct driver mtd_driver;
 static int mtd_open(const char *mtd, int block)
 {
 	FILE *fp;
-	char dev[PATH_MAX];
+	char dev[MTD_PATH_MAX];
 	int i, ret, flags = O_RDWR | O_SYNC;
 
 	if ((fp = fopen("/proc/mtd", "r"))) {

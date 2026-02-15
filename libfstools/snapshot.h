@@ -14,7 +14,6 @@
 #ifndef _SNAPSHOT_H__
 #define _SNAPSHOT_H__
 
-#define PATH_MAX	256
 #define OWRT		0x4f575254
 #define DATA		0x44415441
 #define CONF		0x434f4e46
