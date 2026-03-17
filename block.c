@@ -52,6 +52,16 @@
 #include "libubi/libubi.h"
 #endif
 
+#ifndef SWAP_FLAG_DISCARD
+#define SWAP_FLAG_DISCARD 0x10000
+#endif
+#ifndef SWAP_FLAG_DISCARD_ONCE
+#define SWAP_FLAG_DISCARD_ONCE 0x20000
+#endif
+#ifndef SWAP_FLAG_DISCARD_PAGES
+#define SWAP_FLAG_DISCARD_PAGES 0x40000
+#endif
+
 enum {
 	TYPE_MOUNT,
 	TYPE_SWAP,
@@ -143,6 +153,7 @@ enum {
 	SWAP_LABEL,
 	SWAP_DEVICE,
 	SWAP_PRIO,
+	SWAP_DISCARD,
 	__SWAP_MAX
 };
 
@@ -152,6 +163,7 @@ static const struct blobmsg_policy swap_policy[__SWAP_MAX] = {
 	[SWAP_LABEL] = { .name = "label", .type = BLOBMSG_TYPE_STRING },
 	[SWAP_DEVICE] = { .name = "device", .type = BLOBMSG_TYPE_STRING },
 	[SWAP_PRIO] = { .name = "priority", .type = BLOBMSG_TYPE_INT32 },
+	[SWAP_DISCARD] = { .name = "discard", .type = BLOBMSG_TYPE_STRING },
 };
 
 static const struct uci_blob_param_list swap_attr_list = {
@@ -307,6 +319,7 @@ static int swap_add(struct uci_section *s)
 {
 	struct blob_attr *tb[__SWAP_MAX] = { 0 };
 	struct mount *m;
+	char *discard;
 
         blob_buf_init(&b, 0);
 	uci_to_blob(&b, s, &swap_attr_list);
@@ -321,10 +334,22 @@ static int swap_add(struct uci_section *s)
 	m->uuid = blobmsg_get_strdup(tb[SWAP_UUID]);
 	m->label = blobmsg_get_strdup(tb[SWAP_LABEL]);
 	m->device = blobmsg_get_basename(tb[SWAP_DEVICE]);
+	discard = blobmsg_get_strdup(tb[SWAP_DISCARD]);
+
 	if (tb[SWAP_PRIO])
 		m->prio = blobmsg_get_u32(tb[SWAP_PRIO]);
 	if (m->prio)
 		m->prio = ((m->prio << SWAP_FLAG_PRIO_SHIFT) & SWAP_FLAG_PRIO_MASK) | SWAP_FLAG_PREFER;
+
+	if (discard) {
+		if (!strcmp(discard, "yes") || !strcmp(discard, "1") || !strcmp(discard, "on"))
+			 m->prio |= SWAP_FLAG_DISCARD;
+		else if (!strcmp(discard, "pages"))
+			 m->prio |= (SWAP_FLAG_DISCARD | SWAP_FLAG_DISCARD_PAGES);
+		else if (!strcmp(discard, "once"))
+			 m->prio |= (SWAP_FLAG_DISCARD | SWAP_FLAG_DISCARD_ONCE);
+	} else
+		 m->prio |= SWAP_FLAG_DISCARD;
 
 	if ((!tb[SWAP_ENABLE]) || blobmsg_get_u32(tb[SWAP_ENABLE])) {
 		/* store complete swap path */
@@ -1817,11 +1842,12 @@ static int main_info(int argc, char **argv)
 
 static int swapon_usage(void)
 {
-	fprintf(stderr, "Usage: swapon [-s] [-a] [[-p pri] DEVICE]\n\n"
-		"\tStart swapping on [DEVICE]\n"
-		" -a\tStart swapping on all swap devices\n"
-		" -p pri\tSet priority of swap device\n"
-		" -s\tShow summary\n");
+	fprintf(stderr, "Usage: swapon [-s] [-a] [ [[-p pri] [-d [once|pages]] DEVICE] ]\n\n"
+		"\t\t\tStart swapping on [DEVICE]\n"
+		" -a\t\t\tStart swapping on all swap devices\n"
+		" -p pri\t\t\tSet priority of swap device\n"
+		" -d [once|pages]\tEnable discard, using 'once', 'pages' or both (default) discard policy\n"
+		" -s\t\t\tShow summary\n");
 	return -1;
 }
 
@@ -1837,12 +1863,11 @@ static int main_swapon(int argc, char **argv)
 	struct stat st;
 	int err;
 
-	while ((ch = getopt(argc, argv, "ap:s")) != -1) {
+	while ((ch = getopt(argc, argv, "ap:sd::")) != -1) {
 		switch(ch) {
 		case 's':
 			fp = fopen("/proc/swaps", "r");
 			lineptr = NULL;
-
 			if (!fp) {
 				ULOG_ERR("failed to open /proc/swaps\n");
 				return -1;
@@ -1858,14 +1883,34 @@ static int main_swapon(int argc, char **argv)
 			list_for_each_entry(pr, &devices, list) {
 				if (strcmp(pr->type, "swap"))
 					continue;
-				if (swapon(pr->dev, 0))
+				if (swapon(pr->dev, SWAP_FLAG_DISCARD))
 					ULOG_ERR("failed to swapon %s\n", pr->dev);
 			}
 			return 0;
 		case 'p':
 			pri = atoi(optarg);
 			if (pri >= 0)
-				flags = ((pri << SWAP_FLAG_PRIO_SHIFT) & SWAP_FLAG_PRIO_MASK) | SWAP_FLAG_PREFER;
+				flags |= ((pri << SWAP_FLAG_PRIO_SHIFT) & SWAP_FLAG_PRIO_MASK) | SWAP_FLAG_PREFER;
+			break;
+		case 'd':
+			lineptr = NULL;
+			flags |= SWAP_FLAG_DISCARD;
+			if (optarg)
+				lineptr = optarg;
+			else if (optind == (argc - 1))
+				break;
+			else if (optind < argc && argv[optind][0] != '-') {
+				lineptr = argv[optind];
+				optind++;
+			}
+			if (lineptr) {
+				if (!strcmp(lineptr, "once"))
+					flags |= SWAP_FLAG_DISCARD_ONCE;
+				else if (!strcmp(lineptr, "pages"))
+					flags |= SWAP_FLAG_DISCARD_PAGES;
+				else
+					return swapon_usage();
+			}
 			break;
 		default:
 			return swapon_usage();
