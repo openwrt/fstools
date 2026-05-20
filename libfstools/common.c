@@ -154,10 +154,21 @@ static bool use_f2fs(struct volume *v, uint64_t offset, const char *bdev)
 	return ret;
 }
 
+static bool use_f2fs_compression(void)
+{
+	char typeparam[BUFLEN];
+
+	if (!get_var_from_file("/proc/cmdline", "fstools_overlay_compression_type",
+			       typeparam, sizeof(typeparam)))
+		return false;
+
+	return typeparam[0] && strcmp(typeparam, "none");
+}
+
 int block_volume_format(struct volume *v, uint64_t offset, const char *bdev)
 {
 	int ret = 0;
-	char str[128];
+	char str[256];
 	unsigned int skip_blocks = 0;
 	int fd;
 	__u32 deadc0de;
@@ -205,10 +216,17 @@ int block_volume_format(struct volume *v, uint64_t offset, const char *bdev)
 		}
 do_format:
 		ULOG_INFO("overlay filesystem in %s has not been formatted yet\n", v->blk);
-		if (use_f2fs(v, offset, bdev))
-			snprintf(str, sizeof(str), "mkfs.f2fs -q -f -l rootfs_data %s", v->blk);
-		else
+		if (use_f2fs(v, offset, bdev)) {
+			if (use_f2fs_compression()) {
+				ULOG_INFO("f2fs overlay compression enabled\n");
+				snprintf(str, sizeof(str),
+					 "mkfs.f2fs -q -f -O extra_attr,compression -l rootfs_data %s", v->blk);
+			} else {
+				snprintf(str, sizeof(str), "mkfs.f2fs -q -f -l rootfs_data %s", v->blk);
+			}
+		} else {
 			snprintf(str, sizeof(str), "mkfs.ext4 -q -F -L rootfs_data %s", v->blk);
+		}
 
 		ret = system(str);
 		break;
