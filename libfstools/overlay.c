@@ -29,6 +29,7 @@
 
 #include "libfstools.h"
 #include "volume.h"
+#include "common.h"
 
 #ifndef GLOB_ONLYDIR
 #define GLOB_ONLYDIR 0x100
@@ -284,6 +285,26 @@ static char *overlay_fs_name(int type)
 	}
 }
 
+static const char *overlay_mount_options(char *fstype)
+{
+	char typeparam[64];
+
+	if (!strcmp(fstype, "f2fs") &&
+	    get_var_from_file("/proc/cmdline", "fstools_overlay_compression_type",
+			      typeparam, sizeof(typeparam))) {
+		if (!strcmp(typeparam, "zstd")) {
+			ULOG_INFO("mounting f2fs overlay with zstd level 3 compression\n");
+			return "compress_algorithm=zstd:3";
+		}
+	}
+
+#ifdef OVL_MOUNT_COMPRESS_ZLIB
+	return "compr=zlib";
+#else
+	return NULL;
+#endif
+}
+
 int
 jffs2_switch(struct volume *v)
 {
@@ -347,24 +368,27 @@ jffs2_switch(struct volume *v)
 static int overlay_mount_fs(struct volume *v, const char *overlay_mp)
 {
 	char *fstype = overlay_fs_name(volume_identify(v));
+	const char *options = overlay_mount_options(fstype);
+#ifdef OVL_MOUNT_FULL_ACCESS_TIME
+	unsigned long mount_flags = MS_RELATIME;
+#else
+	unsigned long mount_flags = MS_NOATIME;
+#endif
 
 	if (mkdir(overlay_mp, 0755)) {
 		ULOG_ERR("failed to mkdir /tmp/overlay: %m\n");
 		return -1;
 	}
 
-	if (mount(v->blk, overlay_mp, fstype,
-#ifdef OVL_MOUNT_FULL_ACCESS_TIME
-		MS_RELATIME,
-#else
-		MS_NOATIME,
-#endif
-#ifdef OVL_MOUNT_COMPRESS_ZLIB
-		"compr=zlib"
-#else
-		NULL
-#endif
-		)) {
+	if (mount(v->blk, overlay_mp, fstype, mount_flags, options)) {
+		if (!strcmp(fstype, "f2fs") && options) {
+			ULOG_WARN("failed to mount f2fs overlay with compression, "
+				  "retrying without compression\n");
+
+			if (!mount(v->blk, overlay_mp, fstype, mount_flags, NULL))
+				return 0;
+		}
+
 		ULOG_ERR("failed to mount -t %s %s /tmp/overlay: %m\n",
 		         fstype, v->blk);
 		return -1;
