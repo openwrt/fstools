@@ -1077,6 +1077,22 @@ static int blockd_notify(const char *method, char *device, struct mount *m,
 	return err;
 }
 
+/* The autofs trigger only fires for devices blockd registered for autofs, so a
+ * missing fstab section just means the device was injected at runtime over ubus
+ * (e.g. by uvol). Mount it via the regular autofs path; blockd's symlink already
+ * exposes it at the registered target. */
+static struct mount* autofs_runtime_block(const char *device)
+{
+	static struct mount m;
+
+	memset(&m, 0, sizeof(m));
+	m.type = TYPE_MOUNT;
+	m.autofs = 1;
+	m.device = (char *)device;
+
+	return &m;
+}
+
 static int mount_device(struct probe_info *pr, int type)
 {
 	struct mount *m;
@@ -1103,6 +1119,8 @@ static int mount_device(struct probe_info *pr, int type)
 	}
 
 	m = find_block(pr->uuid, pr->label, device, NULL);
+	if (!m && type == TYPE_AUTOFS)
+		m = autofs_runtime_block(device);
 	if (m && m->extroot)
 		return -1;
 
