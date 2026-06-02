@@ -47,6 +47,7 @@
 #include "probe.h"
 
 #define AUTOFS_MOUNT_PATH       "/tmp/run/blockd/"
+#define MAX_MOUNT_POINT_COUNT   10
 
 #ifdef UBIFS_EXTROOT
 #include "libubi/libubi.h"
@@ -253,6 +254,31 @@ static void parse_mount_options(struct mount *m, char *optstr)
 	free(optstr);
 }
 
+static char* _concat_key(char *key1, char *key2)
+{
+	char *nkey;
+	if (!key2) {
+		nkey = strdup(key1);
+		if (!nkey) {
+			ULOG_ERR("failed to allocate memory: %d (%m)\n", errno);
+			exit(EXIT_FAILURE);
+		}
+		return nkey;
+	}
+	int klen1 = strlen(key1);
+	int klen2 = strlen(key2);
+	nkey = (char *) malloc(klen1 + klen2 + 2);
+	if (!nkey) {
+		ULOG_ERR("failed to allocate memory: %d (%m)\n", errno);
+		exit(EXIT_FAILURE);
+	}
+	memcpy(nkey, key1, klen1);
+	nkey[klen1] = ',';
+	memcpy(nkey + klen1 + 1, key2, klen2);
+	nkey[klen1 + klen2 + 1] = '\0';
+	return nkey;
+}
+
 static int mount_add(struct uci_section *s)
 {
 	struct blob_attr *tb[__MOUNT_MAX] = { 0 };
@@ -294,11 +320,11 @@ static int mount_add(struct uci_section *s)
 	}
 
 	if (m->uuid)
-		vlist_add(&mounts, &m->node, m->uuid);
+		vlist_add(&mounts, &m->node, _concat_key(m->uuid, m->target));
 	else if (m->label)
-		vlist_add(&mounts, &m->node, m->label);
+		vlist_add(&mounts, &m->node, _concat_key(m->label, m->target));
 	else if (m->device)
-		vlist_add(&mounts, &m->node, m->device);
+		vlist_add(&mounts, &m->node, _concat_key(m->device, m->target));
 
 	return 0;
 }
@@ -387,25 +413,44 @@ static struct mount* find_swap(const char *uuid, const char *label, const char *
 	return NULL;
 }
 
-static struct mount* find_block(const char *uuid, const char *label, const char *device,
+static struct mount** find_block(const char *uuid, const char *label, const char *device,
 				const char *target)
 {
+	int msi = 0;
+	static struct mount *ms[MAX_MOUNT_POINT_COUNT + 1];
 	struct mount *m;
 
 	vlist_for_each_element(&mounts, m, node) {
 		if (m->type != TYPE_MOUNT)
 			continue;
-		if (m->uuid && uuid && !strcasecmp(m->uuid, uuid))
-			return m;
-		if (m->label && label && !strcmp(m->label, label))
-			return m;
-		if (m->target && target && !strcmp(m->target, target))
-			return m;
-		if (m->device && device && !strcmp(m->device, device))
-			return m;
+		if (m->uuid && uuid && !strcasecmp(m->uuid, uuid)) {
+			if (msi < MAX_MOUNT_POINT_COUNT)
+				ms[msi++] = m;
+			else
+				ULOG_WARN("Max mount point limit reached, skipping remaining objects\n");
+		}
+		if (m->label && label && !strcmp(m->label, label)) {
+			if (msi < MAX_MOUNT_POINT_COUNT)
+				ms[msi++] = m;
+			else
+				ULOG_WARN("Max mount point limit reached, skipping remaining objects\n");
+		}
+		if (m->target && target && !strcmp(m->target, target)) {
+			if (msi < MAX_MOUNT_POINT_COUNT)
+				ms[msi++] = m;
+			else
+				ULOG_WARN("Max mount point limit reached, skipping remaining objects\n");
+		}
+		if (m->device && device && !strcmp(m->device, device)) {
+			if (msi < MAX_MOUNT_POINT_COUNT)
+				ms[msi++] = m;
+			else
+				ULOG_WARN("Max mount point limit reached, skipping remaining objects\n");
+		}
 	}
 
-	return NULL;
+	ms[msi] = NULL;
+	return ms;
 }
 
 static void mounts_update(struct vlist_tree *tree, struct vlist_node *node_new,
@@ -619,11 +664,13 @@ static struct probe_info* find_block_info(char *uuid, char *label, char *path)
 	return NULL;
 }
 
-static char* find_mount_point(char *block)
+static char** find_mount_point(char *block)
 {
 	FILE *fp = fopen("/proc/self/mountinfo", "r");
 	static char line[256];
-	char *point = NULL, *pos, *tmp, *cpoint, *devname;
+	static char *points[MAX_MOUNT_POINT_COUNT + 1];
+	char *pos, *tmp, *cpoint, *devname;
+	int point_idx = 0;
 	struct stat s;
 	int rstat;
 	unsigned int minor, major;
@@ -687,8 +734,11 @@ static char* find_mount_point(char *block)
 		*pos = '\0';
 		devname = tmp;
 		if (!strcmp(block, devname)) {
-			point = strdup(cpoint);
-			break;
+			if (point_idx < MAX_MOUNT_POINT_COUNT)
+				points[point_idx++] = strdup(cpoint);
+			else
+				ULOG_WARN("Max mount point limit reached, skipping remaining objects\n");
+			continue;;
 		}
 
 		if (rstat)
@@ -699,36 +749,54 @@ static char* find_mount_point(char *block)
 
 		if (major == major(s.st_rdev) &&
 		    minor == minor(s.st_rdev)) {
-			point = strdup(cpoint);
-			break;
+			if (point_idx < MAX_MOUNT_POINT_COUNT)
+				points[point_idx++] = strdup(cpoint);
+			else
+				ULOG_WARN("Max mount point limit reached, skipping remaining objects\n");
+			continue;;
 		}
 	}
 
 	fclose(fp);
 
-	return point;
+	points[point_idx] = NULL;
+	return points;
 }
 
 static int print_block_uci(struct probe_info *pr)
 {
+	char *mp;
 	if (!strcmp(pr->type, "swap")) {
 		printf("config 'swap'\n");
+		if (pr->uuid)
+			printf("\toption\tuuid\t'%s'\n", pr->uuid);
+		else
+			printf("\toption\tdevice\t'%s'\n", pr->dev);
+		printf("\toption\tenabled\t'0'\n\n");
 	} else {
-		char *mp = find_mount_point(pr->dev);
+		char **mps = find_mount_point(pr->dev);
 
-		printf("config 'mount'\n");
-		if (mp) {
-			printf("\toption\ttarget\t'%s'\n", mp);
-			free(mp);
+		if (*mps) {
+			while ((mp = *mps++)) {
+				printf("config 'mount'\n");
+				printf("\toption\ttarget\t'%s'\n", mp);
+				if (pr->uuid)
+					printf("\toption\tuuid\t'%s'\n", pr->uuid);
+				else
+					printf("\toption\tdevice\t'%s'\n", pr->dev);
+				printf("\toption\tenabled\t'0'\n\n");
+				free(mp);
+			}
 		} else {
+			printf("config 'mount'\n");
 			printf("\toption\ttarget\t'/mnt/%s'\n", basename(pr->dev));
+			if (pr->uuid)
+				printf("\toption\tuuid\t'%s'\n", pr->uuid);
+			else
+				printf("\toption\tdevice\t'%s'\n", pr->dev);
+			printf("\toption\tenabled\t'0'\n\n");
 		}
 	}
-	if (pr->uuid)
-		printf("\toption\tuuid\t'%s'\n", pr->uuid);
-	else
-		printf("\toption\tdevice\t'%s'\n", pr->dev);
-	printf("\toption\tenabled\t'0'\n\n");
 
 	return 0;
 }
@@ -737,23 +805,37 @@ static int print_block_info(struct probe_info *pr)
 {
 	static char *mp;
 
-	mp = find_mount_point(pr->dev);
-	printf("%s:", pr->dev);
-	if (pr->uuid)
-		printf(" UUID=\"%s\"", pr->uuid);
+	char **mps = find_mount_point(pr->dev);
+	if (*mps) {
+		while ((mp = *mps++)) {
+			printf("%s:", pr->dev);
+			if (pr->uuid)
+				printf(" UUID=\"%s\"", pr->uuid);
 
-	if (pr->label)
-		printf(" LABEL=\"%s\"", pr->label);
+			if (pr->label)
+				printf(" LABEL=\"%s\"", pr->label);
 
-	if (pr->version)
-		printf(" VERSION=\"%s\"", pr->version);
+			if (pr->version)
+				printf(" VERSION=\"%s\"", pr->version);
 
-	if (mp) {
-		printf(" MOUNT=\"%s\"", mp);
-		free(mp);
+			printf(" MOUNT=\"%s\"", mp);
+			free(mp);
+
+			printf(" TYPE=\"%s\"\n", pr->type);
+		}
+	} else {
+		printf("%s:", pr->dev);
+		if (pr->uuid)
+			printf(" UUID=\"%s\"", pr->uuid);
+
+		if (pr->label)
+			printf(" LABEL=\"%s\"", pr->label);
+
+		if (pr->version)
+			printf(" VERSION=\"%s\"", pr->version);
+
+		printf(" TYPE=\"%s\"\n", pr->type);
 	}
-
-	printf(" TYPE=\"%s\"\n", pr->type);
 
 	return 0;
 }
@@ -1080,12 +1162,16 @@ static int blockd_notify(const char *method, char *device, struct mount *m,
 static int mount_device(struct probe_info *pr, int type)
 {
 	struct mount *m;
+	struct mount **ms;
 	struct stat st;
 	char *_target = NULL;
 	char *target;
 	char *device;
 	char *mp;
-	int err;
+	char **mps;
+	bool is_mounted;
+	int err = 0, err2;
+	int is_mnt_exist = 0;
 
 	if (!pr)
 		return -1;
@@ -1102,131 +1188,154 @@ static int mount_device(struct probe_info *pr, int type)
 		return 0;
 	}
 
-	m = find_block(pr->uuid, pr->label, device, NULL);
-	if (m && m->extroot)
-		return -1;
+	ms = find_block(pr->uuid, pr->label, device, NULL);
+	while ((m = *ms++)) {
+		if (m && m->extroot)
+			continue;
 
-	mp = find_mount_point(pr->dev);
-	if (mp) {
-		if (m && m->type == TYPE_MOUNT && m->target && strcmp(m->target, mp)) {
-			ULOG_ERR("%s is already mounted on %s\n", pr->dev, mp);
-			err = -1;
-		} else
-			err = 0;
-		free(mp);
-		return err;
-	}
-
-	if (type == TYPE_HOTPLUG)
-		blockd_notify("hotplug", device, m, pr);
-
-	/* Check if device should be mounted & set the target directory */
-	if (m) {
-		switch (type) {
-		case TYPE_HOTPLUG:
-			if (m->autofs)
-				return 0;
-			if (!auto_mount)
-				return -1;
-			break;
-		case TYPE_AUTOFS:
-			if (!m->autofs)
-				return -1;
-			break;
-		case TYPE_DEV:
-			if (m->autofs)
-				return -1;
-			break;
+		is_mounted = false;
+		mps = find_mount_point(pr->dev);
+		while ((mp = *mps++)) {
+			if (!is_mounted && m && m->type == TYPE_MOUNT && m->target && !strcmp(m->target, mp)) {
+				is_mounted = true;
+			}
+			free(mp);
+		}
+		if (is_mounted) {
+			continue;
 		}
 
-		if (m->autofs) {
-			if (asprintf(&_target, "/tmp/run/blockd/%s", device) == -1)
-				exit(ENOMEM);
+		if (type == TYPE_HOTPLUG)
+			blockd_notify("hotplug", device, m, pr);
 
-			target = _target;
-		} else if (m->target) {
-			target = m->target;
-		} else {
+		/* Check if device should be mounted & set the target directory */
+		if (m) {
+			switch (type) {
+			case TYPE_HOTPLUG:
+				if (m->autofs)
+					continue;;
+				if (!auto_mount) {
+					err = -1;
+					continue;
+				}
+				break;
+			case TYPE_AUTOFS:
+				if (!m->autofs) {
+					err = -1;
+					continue;
+				}
+				break;
+			case TYPE_DEV:
+				if (m->autofs) {
+					err = -1;
+					continue;
+				}
+				break;
+			}
+
+			if (m->autofs) {
+				if (asprintf(&_target, "/tmp/run/blockd/%s", device) == -1)
+					exit(ENOMEM);
+
+				target = _target;
+			} else if (m->target) {
+				target = m->target;
+			} else {
+				if (asprintf(&_target, "/mnt/%s", device) == -1)
+					exit(ENOMEM);
+
+				target = _target;
+			}
+		} else if (anon_mount) {
 			if (asprintf(&_target, "/mnt/%s", device) == -1)
 				exit(ENOMEM);
 
 			target = _target;
+		} else {
+			/* No reason to mount this device */
+			continue;
 		}
-	} else if (anon_mount) {
-		if (asprintf(&_target, "/mnt/%s", device) == -1)
-			exit(ENOMEM);
 
-		target = _target;
-	} else {
-		/* No reason to mount this device */
-		return 0;
-	}
+		/* Mount the device */
 
-	/* Mount the device */
+		if (check_fs)
+			check_filesystem(pr);
 
-	if (check_fs)
-		check_filesystem(pr);
+		mkdir_p(target, 0755);
+		if (!lstat(target, &st) && S_ISLNK(st.st_mode))
+			unlink(target);
 
-	mkdir_p(target, 0755);
-	if (!lstat(target, &st) && S_ISLNK(st.st_mode))
-		unlink(target);
+		err2 = handle_mount(pr->dev, target, pr->type, m);
+		if (err2) {
+			ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
+					pr->dev, pr->type, target, errno);
 
-	err = handle_mount(pr->dev, target, pr->type, m);
-	if (err) {
-		ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
-				pr->dev, pr->type, target, errno);
+			if (_target)
+				free(_target);
+
+			err = err2;
+			continue;
+		}
 
 		if (_target)
 			free(_target);
 
-		return err;
+		handle_swapfiles(true);
+
+		if (type != TYPE_AUTOFS)
+			blockd_notify("mount", device, NULL, NULL);
+	
+		is_mnt_exist = 1;
 	}
 
-	if (_target)
-		free(_target);
-
-	handle_swapfiles(true);
-
-	if (type != TYPE_AUTOFS)
-		blockd_notify("mount", device, NULL, NULL);
-
-	return 0;
+	if (!is_mnt_exist)
+		return -1;
+	return err;
 }
 
-static int umount_device(char *path, int type, bool all)
+static int umount_device(char *path, int type, bool all, bool skip_extroot)
 {
 	char *mp, *devpath;
-	int err;
+	char **mps;
+	int err = 0, err2;
 
 	if (strlen(path) > 5 && !strncmp("/dev/", path, 5)) {
-		mp = find_mount_point(path);
+		mps = find_mount_point(path);
 	} else {
 		devpath = malloc(strlen(path) + 6);
 		strcpy(devpath, "/dev/");
 		strcat(devpath, path);
-		mp = find_mount_point(devpath);
+		mps = find_mount_point(devpath);
 		free(devpath);
 	}
 
-	if (!mp)
+	if (!mps[0])
 		return -1;
-	if (!strcmp(mp, "/") && !all) {
+	while ((mp = *mps++)) {
+		if (skip_extroot && (!strcmp(mp, "/") || !strcmp(mp, "/overlay"))) {
+			free(mp);
+			continue;
+		}
+
+		if (!strcmp(mp, "/") && !all) {
+			free(mp);
+			continue;
+		}
+		if (type != TYPE_AUTOFS)
+			blockd_notify("umount", basename(path), NULL, NULL);
+
+		err2 = umount2(mp, MNT_DETACH);
+		if (err2) {
+			ULOG_ERR("unmounting %s (%s) failed (%d) - %m\n", path, mp,
+				errno);
+			err = err2;
+		} else {
+			ULOG_INFO("unmounted %s (%s)\n", path, mp);
+			rmdir(mp);
+		}
+
 		free(mp);
-		return 0;
 	}
-	if (type != TYPE_AUTOFS)
-		blockd_notify("umount", basename(path), NULL, NULL);
-
-	err = umount2(mp, MNT_DETACH);
-	if (err) {
-		ULOG_ERR("unmounting %s (%s) failed (%d) - %m\n", path, mp,
-			 errno);
-	} else {
-		ULOG_INFO("unmounted %s (%s)\n", path, mp);
-		rmdir(mp);
-	}
-
-	free(mp);
 	return err;
 }
 
@@ -1242,7 +1351,7 @@ static int mount_action(char *action, char *device, int type)
 		if (type == TYPE_HOTPLUG)
 			blockd_notify("hotplug", device, NULL, NULL);
 
-		umount_device(device, type, true);
+		umount_device(device, type, true, false);
 
 		return 0;
 	} else if (strcmp(action, "add")) {
@@ -1287,19 +1396,24 @@ static int main_autofs(int argc, char **argv)
 		cache_load(1);
 		list_for_each_entry(pr, &devices, list) {
 			struct mount *m;
+			struct mount **ms;
 			char *mp;
+			char **mps;
 
 			if (!strcmp(pr->type, "swap"))
 				continue;
 
-			m = find_block(pr->uuid, pr->label, NULL, NULL);
-			if (m && m->extroot)
-				continue;
+			ms = find_block(pr->uuid, pr->label, NULL, NULL);
+			while ((m = *ms++)) {
+				if (m && m->extroot)
+					continue;
 
-			blockd_notify("hotplug", pr->dev, m, pr);
-			if ((!m || !m->autofs) && (mp = find_mount_point(pr->dev))) {
-				blockd_notify("mount", pr->dev, NULL, NULL);
-				free(mp);
+				blockd_notify("hotplug", pr->dev, m, pr);
+				if ((!m || !m->autofs) && *(mps = find_mount_point(pr->dev))) {
+					blockd_notify("mount", pr->dev, NULL, NULL);
+					while ((mp = *mps++))
+						free(mp);
+				}
 			}
 		}
 	} else {
@@ -1561,6 +1675,7 @@ static int mount_extroot(char *cfg)
 	char *path = mnt;
 	struct probe_info *pr;
 	struct mount *m;
+	struct mount **ms;
 	int err = -1;
 
 	/* Load @cfg/etc/config/fstab */
@@ -1568,9 +1683,12 @@ static int mount_extroot(char *cfg)
 		return -2;
 
 	/* See if there is extroot-specific mount config */
-	m = find_block(NULL, NULL, NULL, "/");
-	if (!m)
-		m = find_block(NULL, NULL, NULL, "/overlay");
+	ms = find_block(NULL, NULL, NULL, "/");
+	m = ms[0];
+	if (!m) {
+		ms = find_block(NULL, NULL, NULL, "/overlay");
+		m = ms[0];
+	}
 
 	if (!m || !m->extroot)
 	{
@@ -1750,16 +1868,16 @@ static int main_umount(int argc, char **argv)
 		all = !strcmp(argv[2], "-a");
 
 	list_for_each_entry(pr, &devices, list) {
-		struct mount *m;
+		// struct mount *m;
 
 		if (!strcmp(pr->type, "swap"))
 			continue;
 
-		m = find_block(pr->uuid, pr->label, basename(pr->dev), NULL);
-		if (m && m->extroot)
-			continue;
+		// m = find_block(pr->uuid, pr->label, basename(pr->dev), NULL);
+		// if (m && m->extroot)
+		// 	continue;
 
-		umount_device(pr->dev, TYPE_DEV, all);
+		umount_device(pr->dev, TYPE_DEV, all, true);
 	}
 
 	return 0;
