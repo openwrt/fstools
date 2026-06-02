@@ -100,7 +100,7 @@ block(char *cmd, char *action, char *device, int sync, struct uloop_process *pro
 {
 	pid_t pid = fork();
 	int ret = sync;
-	int status;
+	int status = 0;
 	char *argv[5] = { 0 };
 	int a = 0;
 
@@ -125,7 +125,8 @@ block(char *cmd, char *action, char *device, int sync, struct uloop_process *pro
 			process->pid = pid;
 			uloop_process_add(process);
 		} else if (sync) {
-			waitpid(pid, &status, 0);
+			while (waitpid(pid, &status, 0) < 0 && errno == EINTR)
+				;
 			ret = WEXITSTATUS(status);
 			if (ret)
 				ULOG_ERR("failed to run block. %s/%s\n", action, device);
