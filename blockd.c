@@ -595,8 +595,13 @@ static void autofs_expire(struct uloop_timeout *t)
 {
 	struct autofs_packet_expire pkt;
 
-	while (ioctl(fd_autofs_write, AUTOFS_IOC_EXPIRE, &pkt) == 0)
+	while (ioctl(fd_autofs_write, AUTOFS_IOC_EXPIRE, &pkt) == 0) {
 		block("autofs", "remove", pkt.name, 1, NULL);
+		/* the idle mount has been torn down, so its backing block device
+		 * now has no holder; signal subscribers (e.g. uvol's deferred reap)
+		 * that the device became free */
+		send_block_notification(&conn.ctx, "umount", pkt.name, NULL);
+	}
 
 	uloop_timeout_set(t, AUTOFS_EXPIRE_TIMER);
 }
