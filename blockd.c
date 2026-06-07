@@ -46,6 +46,7 @@ static struct uloop_fd fd_autofs_read;
 static int fd_autofs_write = 0;
 static struct ubus_auto_conn conn;
 struct blob_buf bb = { 0 };
+static int blockd_ready;
 
 enum {
 	MOUNT_UUID,
@@ -491,6 +492,7 @@ block_info(struct ubus_context *ctx, struct ubus_object *obj,
 	} else {
 		void *a;
 
+		blobmsg_add_u8(&bb, "ready", blockd_ready);
 		a = blobmsg_open_array(&bb, "devices");
 		vlist_for_each_element(&devices, device, node) {
 			void *t;
@@ -506,11 +508,24 @@ block_info(struct ubus_context *ctx, struct ubus_object *obj,
 	return 0;
 }
 
+static int
+block_status(struct ubus_context *ctx, struct ubus_object *obj,
+	     struct ubus_request_data *req, const char *method,
+	     struct blob_attr *msg)
+{
+	blob_buf_init(&bb, 0);
+	blobmsg_add_u8(&bb, "ready", blockd_ready);
+	ubus_send_reply(ctx, req, bb.head);
+
+	return 0;
+}
+
 static const struct ubus_method block_methods[] = {
 	UBUS_METHOD("hotplug", block_hotplug, mount_policy),
 	UBUS_METHOD("mount", blockd_mount, mount_policy),
 	UBUS_METHOD("umount", blockd_umount, mount_policy),
 	UBUS_METHOD("info", block_info, info_policy),
+	UBUS_METHOD_NOARG("status", block_status),
 };
 
 static struct ubus_object_type block_object_type =
@@ -681,6 +696,7 @@ static size_t coldplug_next_idx;
 
 static void startup_ready(void)
 {
+	blockd_ready = 1;
 	send_block_notification(&conn.ctx, "ready", NULL, NULL);
 }
 
