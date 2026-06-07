@@ -1093,7 +1093,7 @@ static struct mount* autofs_runtime_block(const char *device)
 	return &m;
 }
 
-static int mount_device(struct probe_info *pr, int type)
+static int mount_device(struct probe_info *pr, const char *options, int type)
 {
 	struct mount *m;
 	struct stat st;
@@ -1119,8 +1119,13 @@ static int mount_device(struct probe_info *pr, int type)
 	}
 
 	m = find_block(pr->uuid, pr->label, device, NULL);
-	if (!m && type == TYPE_AUTOFS)
+	if (!m && type == TYPE_AUTOFS) {
 		m = autofs_runtime_block(device);
+		/* runtime volumes have no fstab entry; honour the options the
+		 * registrant declared over blockd (e.g. ro for a ro volume) */
+		if (m && options)
+			parse_mount_options(m, strdup(options));
+	}
 	if (m && m->extroot)
 		return -1;
 
@@ -1248,7 +1253,7 @@ static int umount_device(char *path, int type, bool all)
 	return err;
 }
 
-static int mount_action(char *action, char *device, int type)
+static int mount_action(char *action, char *device, const char *options, int type)
 {
 	char *path = NULL;
 	struct probe_info *pr;
@@ -1281,12 +1286,12 @@ static int mount_action(char *action, char *device, int type)
 	if (!path)
 		return -1;
 
-	return mount_device(find_block_info(NULL, NULL, path), type);
+	return mount_device(find_block_info(NULL, NULL, path), options, type);
 }
 
 static int main_hotplug(int argc, char **argv)
 {
-	return mount_action(getenv("ACTION"), getenv("DEVNAME"), TYPE_HOTPLUG);
+	return mount_action(getenv("ACTION"), getenv("DEVNAME"), NULL, TYPE_HOTPLUG);
 }
 
 static int main_autofs(int argc, char **argv)
@@ -1324,7 +1329,7 @@ static int main_autofs(int argc, char **argv)
 		if (argc < 4)
 			return -EINVAL;
 
-		err = mount_action(argv[2], argv[3], TYPE_AUTOFS);
+		err = mount_action(argv[2], argv[3], (argc > 4) ? argv[4] : NULL, TYPE_AUTOFS);
 	}
 
 	if (err) {
@@ -1745,7 +1750,7 @@ static int main_mount(int argc, char **argv)
 
 	cache_load(1);
 	list_for_each_entry(pr, &devices, list)
-		mount_device(pr, TYPE_DEV);
+		mount_device(pr, NULL, TYPE_DEV);
 
 	handle_swapfiles(true);
 

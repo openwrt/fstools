@@ -96,12 +96,12 @@ _find_mount_point(char *device)
 }
 
 static int
-block(char *cmd, char *action, char *device, int sync, struct uloop_process *process)
+block(char *cmd, char *action, char *device, char *options, int sync, struct uloop_process *process)
 {
 	pid_t pid = fork();
 	int ret = sync;
 	int status = 0;
-	char *argv[5] = { 0 };
+	char *argv[6] = { 0 };
 	int a = 0;
 
 	switch (pid) {
@@ -116,6 +116,8 @@ block(char *cmd, char *action, char *device, int sync, struct uloop_process *pro
 		argv[a++] = cmd;
 		argv[a++] = action;
 		argv[a++] = device;
+		if (options)
+			argv[a++] = options;
 		execvp(argv[0], argv);
 		ULOG_ERR("failed to spawn %s %s %s\n", *argv, action, device);
 		exit(EXIT_FAILURE);
@@ -195,7 +197,7 @@ static void device_mount_remove_hotplug_cb(struct uloop_process *p, int stat)
 
 	mp = _find_mount_point(device->name);
 	if (mp) {
-		block("autofs", "remove", device->name, 0, NULL);
+		block("autofs", "remove", device->name, NULL, 0, NULL);
 		free(mp);
 	}
 
@@ -356,7 +358,7 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 			device_mount_remove(ctx, old);
 			device_mount_add(ctx, device);
 			if (!device->autofs)
-				block("mount", NULL, NULL, 0, NULL);
+				block("mount", NULL, NULL, NULL, 0, NULL);
 		} else if (device->autofs) {
 			device_mount_add(ctx, device);
 		}
@@ -569,6 +571,9 @@ static void autofs_read_handler(struct uloop_fd *u, unsigned int events)
 	const struct autofs_v5_packet *pkt;
 	int cmd = AUTOFS_IOC_READY;
 	struct stat st;
+	struct device *device;
+	struct blob_attr *data[__MOUNT_MAX];
+	char *options = NULL;
 
 	while (read(u->fd, &pktu, sizeof(pktu)) == -1) {
 		if (errno != EINTR)
@@ -583,8 +588,18 @@ static void autofs_read_handler(struct uloop_fd *u, unsigned int events)
 
 	pkt = &pktu.missing_indirect;
         ULOG_ERR("kernel is requesting a mount -> %s\n", pkt->name);
+
+	/* pass the registrant's mount options (e.g. ro) down to block */
+	device = vlist_find(&devices, pkt->name, device, node);
+	if (device && device->msg) {
+		blobmsg_parse(mount_policy, __MOUNT_MAX, data,
+			      blob_data(device->msg), blob_len(device->msg));
+		if (data[MOUNT_OPTIONS])
+			options = blobmsg_get_string(data[MOUNT_OPTIONS]);
+	}
+
 	if (lstat(pkt->name, &st) == -1)
-		if (block("autofs", "add", (char *)pkt->name, 1, NULL))
+		if (block("autofs", "add", (char *)pkt->name, options, 1, NULL))
 			cmd = AUTOFS_IOC_FAIL;
 
 	if (ioctl(fd_autofs_write, cmd, pkt->wait_queue_token) < 0)
@@ -596,7 +611,7 @@ static void autofs_expire(struct uloop_timeout *t)
 	struct autofs_packet_expire pkt;
 
 	while (ioctl(fd_autofs_write, AUTOFS_IOC_EXPIRE, &pkt) == 0) {
-		block("autofs", "remove", pkt.name, 1, NULL);
+		block("autofs", "remove", pkt.name, NULL, 1, NULL);
 		/* the idle mount has been torn down, so its backing block device
 		 * now has no holder; signal subscribers (e.g. uvol's deferred reap)
 		 * that the device became free */
@@ -705,7 +720,7 @@ static void coldplug() {
 
 static void blockd_startup(struct uloop_timeout *t)
 {
-	block("autofs", "start", NULL, 0, &startup_process);
+	block("autofs", "start", NULL, NULL, 0, &startup_process);
 	coldplug();
 }
 
