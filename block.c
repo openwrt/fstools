@@ -78,6 +78,7 @@ struct mount {
 	int autofs;
 	int overlay;
 	int disabled_fsck;
+	int check_fs;
 	unsigned int prio;
 };
 
@@ -215,6 +216,7 @@ static void parse_mount_options(struct mount *m, char *optstr)
 
 	m->flags = 0;
 	m->options = NULL;
+	m->check_fs = 0;
 
 	if (!optstr || !*optstr)
 		return;
@@ -241,6 +243,11 @@ static void parse_mount_options(struct mount *m, char *optstr)
 				is_flag = true;
 				break;
 			}
+		}
+
+		if (!is_flag && !strcmp(last, "check_fs")) {
+			m->check_fs = 1;
+			is_flag = true;
 		}
 
 		if (!is_flag)
@@ -1187,7 +1194,7 @@ static int mount_device(struct probe_info *pr, const char *options, int type)
 
 	/* Mount the device */
 
-	if (check_fs)
+	if (check_fs || (m && m->check_fs))
 		check_filesystem(pr);
 
 	mkdir_p(target, 0755);
