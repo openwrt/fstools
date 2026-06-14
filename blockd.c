@@ -58,6 +58,7 @@ enum {
 	MOUNT_AUTOFS,
 	MOUNT_ANON,
 	MOUNT_REMOVE,
+	MOUNT_CHECK_FS,
 	__MOUNT_MAX
 };
 
@@ -71,6 +72,7 @@ static const struct blobmsg_policy mount_policy[__MOUNT_MAX] = {
 	[MOUNT_AUTOFS] = { .name = "autofs", .type = BLOBMSG_TYPE_INT32 },
 	[MOUNT_ANON] = { .name = "anon", .type = BLOBMSG_TYPE_INT32 },
 	[MOUNT_REMOVE] = { .name = "remove", .type = BLOBMSG_TYPE_INT32 },
+	[MOUNT_CHECK_FS] = { .name = "check_fs", .type = BLOBMSG_TYPE_INT32 },
 };
 
 enum {
@@ -589,6 +591,7 @@ static void autofs_read_handler(struct uloop_fd *u, unsigned int events)
 	struct device *device;
 	struct blob_attr *data[__MOUNT_MAX];
 	char *options = NULL;
+	char optbuf[256];
 
 	while (read(u->fd, &pktu, sizeof(pktu)) == -1) {
 		if (errno != EINTR)
@@ -611,6 +614,11 @@ static void autofs_read_handler(struct uloop_fd *u, unsigned int events)
 			      blob_data(device->msg), blob_len(device->msg));
 		if (data[MOUNT_OPTIONS])
 			options = blobmsg_get_string(data[MOUNT_OPTIONS]);
+		if (data[MOUNT_CHECK_FS] && blobmsg_get_u32(data[MOUNT_CHECK_FS])) {
+			snprintf(optbuf, sizeof(optbuf), "%s%scheck_fs",
+				 options ? options : "", options ? "," : "");
+			options = optbuf;
+		}
 	}
 
 	if (lstat(pkt->name, &st) == -1)
