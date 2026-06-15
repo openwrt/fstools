@@ -699,28 +699,72 @@ static int autofs_mount(void)
 	return 0;
 }
 
-static void blockd_startup_cb(struct uloop_process *p, int stat)
+static int startup_pending;
+
+static void startup_ready(void)
 {
+	if (startup_pending)
+		return;
+
 	blockd_ready = 1;
 	send_block_notification(&conn.ctx, "ready", NULL, NULL);
 }
 
-static struct uloop_process startup_process = {
-	.cb = blockd_startup_cb,
-};
+static void startup_process_cb(struct uloop_process *p, int stat)
+{
+	free(p);
+	startup_pending--;
+	startup_ready();
+}
 
-static void coldplug() {
-	char *env[3], *args[3];
+/*
+ * Spawn a /sbin/block helper without blocking the main loop. block's autofs
+ * and hotplug actions call back into this daemon over ubus, so a synchronous
+ * wait here would starve our own ubus loop and deadlock until each call times
+ * out. Track the children instead and announce readiness once they have all
+ * finished, so the device list is complete before subscribers re-register.
+ */
+static void startup_spawn(char *const argv[], char *const envp[])
+{
+	struct uloop_process *p;
+	pid_t pid = fork();
+
+	if (pid < 0) {
+		ULOG_ERR("failed to fork block %s\n", argv[1]);
+		return;
+	}
+
+	if (!pid) {
+		uloop_end();
+		if (envp)
+			execve(argv[0], argv, envp);
+		else
+			execvp(argv[0], argv);
+		_exit(EXIT_FAILURE);
+	}
+
+	p = calloc(1, sizeof(*p));
+	if (!p) {
+		while (waitpid(pid, NULL, 0) < 0 && errno == EINTR)
+			;
+		return;
+	}
+
+	p->pid = pid;
+	p->cb = startup_process_cb;
+	startup_pending++;
+	uloop_process_add(p);
+}
+
+static void coldplug(void)
+{
+	char *argv[] = { "/sbin/block", "hotplug", NULL };
+	char *env[3];
 	glob_t gl;
-	pid_t pid;
 	int i;
 
 	if (glob("/sys/class/block/*", GLOB_NOESCAPE | GLOB_MARK, NULL, &gl))
 		return;
-
-	args[0] = "block";
-	args[1] = "hotplug";
-	args[2] = NULL;
 
 	env[0] = "ACTION=add";
 	env[2] = NULL;
@@ -729,23 +773,20 @@ static void coldplug() {
 		if (asprintf(&env[1], "DEVNAME=%s", basename(gl.gl_pathv[i])) == -1)
 			continue;
 
-		pid = fork();
-		if (!pid) {
-			execve("/sbin/block", args, env);
-			_exit(EXIT_FAILURE);
-		}
-		if (pid > 0)
-			waitpid(pid, NULL, 0);
+		startup_spawn(argv, env);
 		free(env[1]);
 	}
 
 	globfree(&gl);
-};
+}
 
 static void blockd_startup(struct uloop_timeout *t)
 {
-	block("autofs", "start", NULL, NULL, 0, &startup_process);
+	char *argv[] = { "/sbin/block", "autofs", "start", NULL };
+
+	startup_spawn(argv, NULL);
 	coldplug();
+	startup_ready();
 }
 
 struct uloop_timeout startup = {
