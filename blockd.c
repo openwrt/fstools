@@ -3,12 +3,14 @@
 #include <sys/mount.h>
 #include <sys/wait.h>
 
+#include <libgen.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
 
 #include <errno.h>
+#include <glob.h>
 
 #include <linux/limits.h>
 #include <linux/auto_fs4.h>
@@ -44,6 +46,7 @@ static struct uloop_fd fd_autofs_read;
 static int fd_autofs_write = 0;
 static struct ubus_auto_conn conn;
 struct blob_buf bb = { 0 };
+static int blockd_ready;
 
 enum {
 	MOUNT_UUID,
@@ -55,6 +58,7 @@ enum {
 	MOUNT_AUTOFS,
 	MOUNT_ANON,
 	MOUNT_REMOVE,
+	MOUNT_CHECK_FS,
 	__MOUNT_MAX
 };
 
@@ -68,6 +72,7 @@ static const struct blobmsg_policy mount_policy[__MOUNT_MAX] = {
 	[MOUNT_AUTOFS] = { .name = "autofs", .type = BLOBMSG_TYPE_INT32 },
 	[MOUNT_ANON] = { .name = "anon", .type = BLOBMSG_TYPE_INT32 },
 	[MOUNT_REMOVE] = { .name = "remove", .type = BLOBMSG_TYPE_INT32 },
+	[MOUNT_CHECK_FS] = { .name = "check_fs", .type = BLOBMSG_TYPE_INT32 },
 };
 
 enum {
@@ -94,12 +99,12 @@ _find_mount_point(char *device)
 }
 
 static int
-block(char *cmd, char *action, char *device, int sync, struct uloop_process *process)
+block(char *cmd, char *action, char *device, char *options, int sync, struct uloop_process *process)
 {
 	pid_t pid = fork();
 	int ret = sync;
-	int status;
-	char *argv[5] = { 0 };
+	int status = 0;
+	char *argv[6] = { 0 };
 	int a = 0;
 
 	switch (pid) {
@@ -114,6 +119,8 @@ block(char *cmd, char *action, char *device, int sync, struct uloop_process *pro
 		argv[a++] = cmd;
 		argv[a++] = action;
 		argv[a++] = device;
+		if (options)
+			argv[a++] = options;
 		execvp(argv[0], argv);
 		ULOG_ERR("failed to spawn %s %s %s\n", *argv, action, device);
 		exit(EXIT_FAILURE);
@@ -123,7 +130,8 @@ block(char *cmd, char *action, char *device, int sync, struct uloop_process *pro
 			process->pid = pid;
 			uloop_process_add(process);
 		} else if (sync) {
-			waitpid(pid, &status, 0);
+			while (waitpid(pid, &status, 0) < 0 && errno == EINTR)
+				;
 			ret = WEXITSTATUS(status);
 			if (ret)
 				ULOG_ERR("failed to run block. %s/%s\n", action, device);
@@ -192,7 +200,7 @@ static void device_mount_remove_hotplug_cb(struct uloop_process *p, int stat)
 
 	mp = _find_mount_point(device->name);
 	if (mp) {
-		block("autofs", "remove", device->name, 0, NULL);
+		block("autofs", "remove", device->name, NULL, 0, NULL);
 		free(mp);
 	}
 
@@ -353,7 +361,7 @@ block_hotplug(struct ubus_context *ctx, struct ubus_object *obj,
 			device_mount_remove(ctx, old);
 			device_mount_add(ctx, device);
 			if (!device->autofs)
-				block("mount", NULL, NULL, 0, NULL);
+				block("mount", NULL, NULL, NULL, 0, NULL);
 		} else if (device->autofs) {
 			device_mount_add(ctx, device);
 		}
@@ -486,6 +494,7 @@ block_info(struct ubus_context *ctx, struct ubus_object *obj,
 	} else {
 		void *a;
 
+		blobmsg_add_u8(&bb, "ready", blockd_ready);
 		a = blobmsg_open_array(&bb, "devices");
 		vlist_for_each_element(&devices, device, node) {
 			void *t;
@@ -501,11 +510,24 @@ block_info(struct ubus_context *ctx, struct ubus_object *obj,
 	return 0;
 }
 
+static int
+block_status(struct ubus_context *ctx, struct ubus_object *obj,
+	     struct ubus_request_data *req, const char *method,
+	     struct blob_attr *msg)
+{
+	blob_buf_init(&bb, 0);
+	blobmsg_add_u8(&bb, "ready", blockd_ready);
+	ubus_send_reply(ctx, req, bb.head);
+
+	return 0;
+}
+
 static const struct ubus_method block_methods[] = {
 	UBUS_METHOD("hotplug", block_hotplug, mount_policy),
 	UBUS_METHOD("mount", blockd_mount, mount_policy),
 	UBUS_METHOD("umount", blockd_umount, mount_policy),
 	UBUS_METHOD("info", block_info, info_policy),
+	UBUS_METHOD_NOARG("status", block_status),
 };
 
 static struct ubus_object_type block_object_type =
@@ -566,6 +588,10 @@ static void autofs_read_handler(struct uloop_fd *u, unsigned int events)
 	const struct autofs_v5_packet *pkt;
 	int cmd = AUTOFS_IOC_READY;
 	struct stat st;
+	struct device *device;
+	struct blob_attr *data[__MOUNT_MAX];
+	char *options = NULL;
+	char optbuf[256];
 
 	while (read(u->fd, &pktu, sizeof(pktu)) == -1) {
 		if (errno != EINTR)
@@ -580,8 +606,23 @@ static void autofs_read_handler(struct uloop_fd *u, unsigned int events)
 
 	pkt = &pktu.missing_indirect;
         ULOG_ERR("kernel is requesting a mount -> %s\n", pkt->name);
+
+	/* pass the registrant's mount options (e.g. ro) down to block */
+	device = vlist_find(&devices, pkt->name, device, node);
+	if (device && device->msg) {
+		blobmsg_parse(mount_policy, __MOUNT_MAX, data,
+			      blob_data(device->msg), blob_len(device->msg));
+		if (data[MOUNT_OPTIONS])
+			options = blobmsg_get_string(data[MOUNT_OPTIONS]);
+		if (data[MOUNT_CHECK_FS] && blobmsg_get_u32(data[MOUNT_CHECK_FS])) {
+			snprintf(optbuf, sizeof(optbuf), "%s%scheck_fs",
+				 options ? options : "", options ? "," : "");
+			options = optbuf;
+		}
+	}
+
 	if (lstat(pkt->name, &st) == -1)
-		if (block("autofs", "add", (char *)pkt->name, 1, NULL))
+		if (block("autofs", "add", (char *)pkt->name, options, 1, NULL))
 			cmd = AUTOFS_IOC_FAIL;
 
 	if (ioctl(fd_autofs_write, cmd, pkt->wait_queue_token) < 0)
@@ -592,8 +633,13 @@ static void autofs_expire(struct uloop_timeout *t)
 {
 	struct autofs_packet_expire pkt;
 
-	while (ioctl(fd_autofs_write, AUTOFS_IOC_EXPIRE, &pkt) == 0)
-		block("autofs", "remove", pkt.name, 1, NULL);
+	while (ioctl(fd_autofs_write, AUTOFS_IOC_EXPIRE, &pkt) == 0) {
+		block("autofs", "remove", pkt.name, NULL, 1, NULL);
+		/* the idle mount has been torn down, so its backing block device
+		 * now has no holder; signal subscribers (e.g. uvol's deferred reap)
+		 * that the device became free */
+		send_block_notification(&conn.ctx, "umount", pkt.name, NULL);
+	}
 
 	uloop_timeout_set(t, AUTOFS_EXPIRE_TIMER);
 }
@@ -653,18 +699,94 @@ static int autofs_mount(void)
 	return 0;
 }
 
-static void blockd_startup_cb(struct uloop_process *p, int stat)
+static int startup_pending;
+
+static void startup_ready(void)
 {
+	if (startup_pending)
+		return;
+
+	blockd_ready = 1;
 	send_block_notification(&conn.ctx, "ready", NULL, NULL);
 }
 
-static struct uloop_process startup_process = {
-	.cb = blockd_startup_cb,
-};
+static void startup_process_cb(struct uloop_process *p, int stat)
+{
+	free(p);
+	startup_pending--;
+	startup_ready();
+}
+
+/*
+ * Spawn a /sbin/block helper without blocking the main loop. block's autofs
+ * and hotplug actions call back into this daemon over ubus, so a synchronous
+ * wait here would starve our own ubus loop and deadlock until each call times
+ * out. Track the children instead and announce readiness once they have all
+ * finished, so the device list is complete before subscribers re-register.
+ */
+static void startup_spawn(char *const argv[], char *const envp[])
+{
+	struct uloop_process *p;
+	pid_t pid = fork();
+
+	if (pid < 0) {
+		ULOG_ERR("failed to fork block %s\n", argv[1]);
+		return;
+	}
+
+	if (!pid) {
+		uloop_end();
+		if (envp)
+			execve(argv[0], argv, envp);
+		else
+			execvp(argv[0], argv);
+		_exit(EXIT_FAILURE);
+	}
+
+	p = calloc(1, sizeof(*p));
+	if (!p) {
+		while (waitpid(pid, NULL, 0) < 0 && errno == EINTR)
+			;
+		return;
+	}
+
+	p->pid = pid;
+	p->cb = startup_process_cb;
+	startup_pending++;
+	uloop_process_add(p);
+}
+
+static void coldplug(void)
+{
+	char *argv[] = { "/sbin/block", "hotplug", NULL };
+	char *env[3];
+	glob_t gl;
+	int i;
+
+	if (glob("/sys/class/block/*", GLOB_NOESCAPE | GLOB_MARK, NULL, &gl))
+		return;
+
+	env[0] = "ACTION=add";
+	env[2] = NULL;
+
+	for (i = 0; i < gl.gl_pathc; ++i) {
+		if (asprintf(&env[1], "DEVNAME=%s", basename(gl.gl_pathv[i])) == -1)
+			continue;
+
+		startup_spawn(argv, env);
+		free(env[1]);
+	}
+
+	globfree(&gl);
+}
 
 static void blockd_startup(struct uloop_timeout *t)
 {
-	block("autofs", "start", NULL, 0, &startup_process);
+	char *argv[] = { "/sbin/block", "autofs", "start", NULL };
+
+	startup_spawn(argv, NULL);
+	coldplug();
+	startup_ready();
 }
 
 struct uloop_timeout startup = {

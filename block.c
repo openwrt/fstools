@@ -78,6 +78,7 @@ struct mount {
 	int autofs;
 	int overlay;
 	int disabled_fsck;
+	int check_fs;
 	unsigned int prio;
 };
 
@@ -215,6 +216,7 @@ static void parse_mount_options(struct mount *m, char *optstr)
 
 	m->flags = 0;
 	m->options = NULL;
+	m->check_fs = 0;
 
 	if (!optstr || !*optstr)
 		return;
@@ -241,6 +243,11 @@ static void parse_mount_options(struct mount *m, char *optstr)
 				is_flag = true;
 				break;
 			}
+		}
+
+		if (!is_flag && !strcmp(last, "check_fs")) {
+			m->check_fs = 1;
+			is_flag = true;
 		}
 
 		if (!is_flag)
@@ -796,7 +803,7 @@ static void check_filesystem(struct probe_info *pr)
 	pid = fork();
 	if (!pid) {
 		if(!strncmp(pr->type, "f2fs", 4)) {
-			execl(ckfs, ckfs, "-f", pr->dev, NULL);
+			execl(ckfs, ckfs, "-a", pr->dev, NULL);
 			exit(EXIT_FAILURE);
 		} else if(!strncmp(pr->type, "btrfs", 5)) {
 			execl(ckfs, ckfs, "--repair", pr->dev, NULL);
@@ -1077,7 +1084,23 @@ static int blockd_notify(const char *method, char *device, struct mount *m,
 	return err;
 }
 
-static int mount_device(struct probe_info *pr, int type)
+/* The autofs trigger only fires for devices blockd registered for autofs, so a
+ * missing fstab section just means the device was injected at runtime over ubus
+ * (e.g. by uvol). Mount it via the regular autofs path; blockd's symlink already
+ * exposes it at the registered target. */
+static struct mount* autofs_runtime_block(const char *device)
+{
+	static struct mount m;
+
+	memset(&m, 0, sizeof(m));
+	m.type = TYPE_MOUNT;
+	m.autofs = 1;
+	m.device = (char *)device;
+
+	return &m;
+}
+
+static int mount_device(struct probe_info *pr, const char *options, int type)
 {
 	struct mount *m;
 	struct stat st;
@@ -1103,6 +1126,13 @@ static int mount_device(struct probe_info *pr, int type)
 	}
 
 	m = find_block(pr->uuid, pr->label, device, NULL);
+	if (!m && type == TYPE_AUTOFS) {
+		m = autofs_runtime_block(device);
+		/* runtime volumes have no fstab entry; honour the options the
+		 * registrant declared over blockd (e.g. ro for a ro volume) */
+		if (m && options)
+			parse_mount_options(m, strdup(options));
+	}
 	if (m && m->extroot)
 		return -1;
 
@@ -1164,7 +1194,7 @@ static int mount_device(struct probe_info *pr, int type)
 
 	/* Mount the device */
 
-	if (check_fs)
+	if (check_fs || (m && m->check_fs))
 		check_filesystem(pr);
 
 	mkdir_p(target, 0755);
@@ -1230,7 +1260,7 @@ static int umount_device(char *path, int type, bool all)
 	return err;
 }
 
-static int mount_action(char *action, char *device, int type)
+static int mount_action(char *action, char *device, const char *options, int type)
 {
 	char *path = NULL;
 	struct probe_info *pr;
@@ -1263,12 +1293,12 @@ static int mount_action(char *action, char *device, int type)
 	if (!path)
 		return -1;
 
-	return mount_device(find_block_info(NULL, NULL, path), type);
+	return mount_device(find_block_info(NULL, NULL, path), options, type);
 }
 
 static int main_hotplug(int argc, char **argv)
 {
-	return mount_action(getenv("ACTION"), getenv("DEVNAME"), TYPE_HOTPLUG);
+	return mount_action(getenv("ACTION"), getenv("DEVNAME"), NULL, TYPE_HOTPLUG);
 }
 
 static int main_autofs(int argc, char **argv)
@@ -1306,7 +1336,7 @@ static int main_autofs(int argc, char **argv)
 		if (argc < 4)
 			return -EINVAL;
 
-		err = mount_action(argv[2], argv[3], TYPE_AUTOFS);
+		err = mount_action(argv[2], argv[3], (argc > 4) ? argv[4] : NULL, TYPE_AUTOFS);
 	}
 
 	if (err) {
@@ -1727,7 +1757,7 @@ static int main_mount(int argc, char **argv)
 
 	cache_load(1);
 	list_for_each_entry(pr, &devices, list)
-		mount_device(pr, TYPE_DEV);
+		mount_device(pr, NULL, TYPE_DEV);
 
 	handle_swapfiles(true);
 
