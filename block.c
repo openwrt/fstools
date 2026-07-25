@@ -796,7 +796,7 @@ static void check_filesystem(struct probe_info *pr)
 	pid = fork();
 	if (!pid) {
 		if(!strncmp(pr->type, "f2fs", 4)) {
-			execl(ckfs, ckfs, "-f", pr->dev, NULL);
+			execl(ckfs, ckfs, "-a", pr->dev, NULL);
 			exit(EXIT_FAILURE);
 		} else if(!strncmp(pr->type, "btrfs", 5)) {
 			execl(ckfs, ckfs, "--repair", pr->dev, NULL);
