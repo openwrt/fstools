@@ -27,6 +27,7 @@
 #define	AUTOFS_MOUNT_PATH	"/tmp/run/blockd/"
 #define AUTOFS_TIMEOUT		30
 #define AUTOFS_EXPIRE_TIMER	(5 * 1000)
+#define STARTUP_TIMEOUT		(10 * 1000)
 
 struct hotplug_context {
 	struct uloop_process process;
@@ -694,10 +695,37 @@ static int autofs_mount(void)
 static glob_t coldplug_gl;
 static size_t coldplug_next_idx;
 
+static void startup_expire(struct uloop_timeout *t);
+
+static struct uloop_timeout startup_timer = {
+	.cb = startup_expire,
+};
+
 static void startup_ready(void)
 {
+	if (blockd_ready)
+		return;
+
+	uloop_timeout_cancel(&startup_timer);
 	blockd_ready = 1;
 	send_block_notification(&conn.ctx, "ready", NULL, NULL);
+}
+
+/*
+ * A coldplug helper is allowed to take as long as it needs, e.g. while fsck
+ * repairs a large volume, and interrupting it would leave that volume in a worse
+ * state than not mounting it at all. Announce readiness anyway once the deadline
+ * passes and let the remaining helpers run to completion: the devices they do
+ * register still emit their own notifications, and a consumer which has to wait
+ * for a specific volume can wait for that instead of for a level which may never
+ * be reached.
+ */
+static void startup_expire(struct uloop_timeout *t)
+{
+	ULOG_WARN("startup still busy after %ds, announcing readiness anyway\n",
+		  STARTUP_TIMEOUT / 1000);
+
+	startup_ready();
 }
 
 /*
@@ -790,6 +818,8 @@ static void autofs_start_cb(struct uloop_process *p, int stat)
 static void blockd_startup(struct uloop_timeout *t)
 {
 	char *argv[] = { "/sbin/block", "autofs", "start", NULL };
+
+	uloop_timeout_set(&startup_timer, STARTUP_TIMEOUT);
 
 	if (!startup_spawn(argv, NULL, autofs_start_cb))
 		coldplug();
