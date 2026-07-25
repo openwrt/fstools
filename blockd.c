@@ -523,13 +523,13 @@ static int send_block_notification(struct ubus_context *ctx, const char *action,
 			    const char *devname, const char *target)
 {
 	struct blob_buf buf = { 0 };
-	char evname[16] = "mount.";
+	char evname[16];
 	int err;
 
 	if (!ctx)
 		return -ENXIO;
 
-	strncat(evname, action, sizeof(evname) - 1);
+	snprintf(evname, sizeof(evname), "mount.%s", action);
 
 	blob_buf_init(&buf, 0);
 
