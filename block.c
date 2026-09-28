@@ -889,7 +889,7 @@ static int exec_mount(const char *source, const char *target,
 	fcntl(pfds[0], F_SETFD, fcntl(pfds[0], F_GETFD) | FD_CLOEXEC);
 	fcntl(pfds[1], F_SETFD, fcntl(pfds[1], F_GETFD) | FD_CLOEXEC);
 
-	pid = vfork();
+	pid = fork();
 
 	switch (pid) {
 	case -1:
@@ -911,7 +911,7 @@ static int exec_mount(const char *source, const char *target,
 		else
 			execl(cmd, cmd, source, target, NULL);
 
-		return -1;
+		_exit(127);
 
 	default:
 		close(pfds[1]);
