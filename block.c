@@ -918,23 +918,36 @@ static int exec_mount(const char *source, const char *target,
 
 		mount_fd = fdopen(pfds[0], "r");
 
-		while (fgets(errmsg, sizeof(errmsg), mount_fd))
-			ULOG_ERR("mount.%s: %s", fstype, errmsg);
+		if (mount_fd) {
+			while (fgets(errmsg, sizeof(errmsg), mount_fd))
+				ULOG_ERR("mount.%s: %s", fstype, errmsg);
 
-		fclose(mount_fd);
-
-		err = waitpid(pid, &status, 0);
-
-		if (err != -1) {
-			if (status != 0) {
-				ULOG_ERR("mount.%s: failed with status %d\n", fstype, status);
-				errno = EINVAL;
-				err = -1;
-			} else {
-				errno = 0;
-				err = 0;
-			}
+			fclose(mount_fd);
+		} else {
+			close(pfds[0]);
 		}
+
+		while ((err = waitpid(pid, &status, 0)) < 0 && errno == EINTR)
+			;
+
+		if (err < 0)
+			break;
+
+		if (WIFEXITED(status) && !WEXITSTATUS(status)) {
+			errno = 0;
+			err = 0;
+			break;
+		}
+
+		if (WIFEXITED(status))
+			ULOG_ERR("mount.%s: failed with code %d\n", fstype,
+				 WEXITSTATUS(status));
+		else if (WIFSIGNALED(status))
+			ULOG_ERR("mount.%s: terminated by %s\n", fstype,
+				 strsignal(WTERMSIG(status)));
+
+		errno = EINVAL;
+		err = -1;
 
 		break;
 	}
