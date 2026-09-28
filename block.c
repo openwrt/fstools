@@ -870,13 +870,21 @@ static void to_devnull(int fd)
 static int exec_mount(const char *source, const char *target,
                       const char *fstype, const char *options)
 {
-	pid_t pid;
-	struct stat s;
-	FILE *mount_fd;
+	char errmsg[128], cmd[sizeof("/sbin/mount.") + NAME_MAX];
 	int err, status, pfds[2];
-	char errmsg[128], cmd[sizeof("/sbin/mount.XXXXXXXXXXXXXXXX\0")];
+	FILE *mount_fd;
+	struct stat s;
+	pid_t pid;
 
-	snprintf(cmd, sizeof(cmd), "/sbin/mount.%s", fstype);
+	if (strchr(fstype, '/')) {
+		ULOG_ERR("Invalid filesystem type \"%s\"\n", fstype);
+		return -1;
+	}
+
+	if (snprintf(cmd, sizeof(cmd), "/sbin/mount.%s", fstype) >= (int)sizeof(cmd)) {
+		ULOG_ERR("Filesystem type \"%s\" is too long\n", fstype);
+		return -1;
+	}
 
 	if (stat(cmd, &s) < 0 || !S_ISREG(s.st_mode) || !(s.st_mode & S_IXUSR)) {
 		ULOG_ERR("No \"mount.%s\" utility available\n", fstype);
