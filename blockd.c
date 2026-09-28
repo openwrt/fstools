@@ -111,7 +111,8 @@ block(char *cmd, char *action, char *device, char *options, int sync, struct ulo
 	switch (pid) {
 	case -1:
 		ULOG_ERR("failed to fork block process\n");
-		break;
+
+		return -1;
 
 	case 0:
 		uloop_end();
