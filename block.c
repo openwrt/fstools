@@ -867,29 +867,45 @@ static void to_devnull(int fd)
 		close(devnull);
 }
 
-static int exec_mount(const char *source, const char *target,
+/* mount(8) names the helper after the type and passes any subtype with -t */
+static bool mount_helper_get(const char *tool, const char *fstype, char *cmd,
+                             size_t len)
+{
+	struct stat s;
+	size_t n;
+
+	n = strcspn(fstype, ".");
+
+	if (snprintf(cmd, len, "/sbin/%s.%.*s", tool, (int)n, fstype) >= (int)len)
+		return false;
+
+	return !stat(cmd, &s) && S_ISREG(s.st_mode) && (s.st_mode & S_IXUSR);
+}
+
+static int exec_mount(const char *cmd, const char *source, const char *target,
                       const char *fstype, const char *options)
 {
-	char errmsg[128], cmd[sizeof("/sbin/mount.") + NAME_MAX];
-	int err, status, pfds[2];
+	int a = 0, err, status, pfds[2];
+	const char *argv[8];
+	char errmsg[128];
 	FILE *mount_fd;
-	struct stat s;
 	pid_t pid;
 
-	if (strchr(fstype, '/')) {
-		ULOG_ERR("Invalid filesystem type \"%s\"\n", fstype);
-		return -1;
+	argv[a++] = cmd;
+	argv[a++] = source;
+	argv[a++] = target;
+
+	if (options && *options) {
+		argv[a++] = "-o";
+		argv[a++] = options;
 	}
 
-	if (snprintf(cmd, sizeof(cmd), "/sbin/mount.%s", fstype) >= (int)sizeof(cmd)) {
-		ULOG_ERR("Filesystem type \"%s\" is too long\n", fstype);
-		return -1;
+	if (strchr(fstype, '.')) {
+		argv[a++] = "-t";
+		argv[a++] = fstype;
 	}
 
-	if (stat(cmd, &s) < 0 || !S_ISREG(s.st_mode) || !(s.st_mode & S_IXUSR)) {
-		ULOG_ERR("No \"mount.%s\" utility available\n", fstype);
-		return -1;
-	}
+	argv[a] = NULL;
 
 	if (pipe(pfds) < 0)
 		return -1;
@@ -914,10 +930,7 @@ static int exec_mount(const char *source, const char *target,
 		close(pfds[0]);
 		close(pfds[1]);
 
-		if (options && *options)
-			execl(cmd, cmd, "-o", options, source, target, NULL);
-		else
-			execl(cmd, cmd, source, target, NULL);
+		execv(cmd, (char **)argv);
 
 		_exit(127);
 
@@ -928,7 +941,7 @@ static int exec_mount(const char *source, const char *target,
 
 		if (mount_fd) {
 			while (fgets(errmsg, sizeof(errmsg), mount_fd))
-				ULOG_ERR("mount.%s: %s", fstype, errmsg);
+				ULOG_ERR("%s: %s", cmd, errmsg);
 
 			fclose(mount_fd);
 		} else {
@@ -948,10 +961,10 @@ static int exec_mount(const char *source, const char *target,
 		}
 
 		if (WIFEXITED(status))
-			ULOG_ERR("mount.%s: failed with code %d\n", fstype,
+			ULOG_ERR("%s: failed with code %d\n", cmd,
 				 WEXITSTATUS(status));
 		else if (WIFSIGNALED(status))
-			ULOG_ERR("mount.%s: terminated by %s\n", fstype,
+			ULOG_ERR("%s: terminated by %s\n", cmd,
 				 strsignal(WTERMSIG(status)));
 
 		errno = EINVAL;
@@ -963,17 +976,60 @@ static int exec_mount(const char *source, const char *target,
 	return err;
 }
 
+/* a mount helper takes as option words what mount(2) takes as flag bits */
+static char *mount_opts_get(struct mount *m)
+{
+	char *mount_opts, *ptr;
+	size_t mount_opts_len;
+	int i;
+
+	mount_opts_len = 1 + (m->options ? strlen(m->options) + 1 : 0);
+
+	for (i = 0; i < ARRAY_SIZE(mount_flags); i++)
+		if ((mount_flags[i].flag > 0) &&
+		    (mount_flags[i].flag < INT_MAX) &&
+		    (m->flags & (uint32_t)mount_flags[i].flag))
+			mount_opts_len += strlen(mount_flags[i].name) + 1;
+
+	ptr = mount_opts = calloc(1, mount_opts_len);
+
+	if (!ptr)
+		return NULL;
+
+	if (m->options)
+		ptr += sprintf(ptr, "%s,", m->options);
+
+	for (i = 0; i < ARRAY_SIZE(mount_flags); i++)
+		if ((mount_flags[i].flag > 0) &&
+		    (mount_flags[i].flag < INT_MAX) &&
+		    (m->flags & (uint32_t)mount_flags[i].flag))
+			ptr += sprintf(ptr, "%s,", mount_flags[i].name);
+
+	if (ptr > mount_opts)
+		*(ptr - 1) = 0;
+
+	return mount_opts;
+}
+
 static const char * const ntfs_fs[] = { "ntfs3", "ntfs-3g", "antfs", "ntfs" };
 
 static int handle_mount(const char *source, const char *target,
                         const char *fstype, struct mount *m)
 {
-	size_t mount_opts_len;
-	char *mount_opts = NULL, *ptr;
+	char cmd[sizeof("/sbin/mount.") + NAME_MAX];
 	const char * const *filesystems;
+	char *mount_opts = NULL;
 	int err = -EINVAL;
+	int mount_errno;
+	bool attempted;
 	size_t count;
 	int i;
+
+	if (strchr(fstype, '/')) {
+		ULOG_ERR("Invalid filesystem type \"%s\"\n", fstype);
+		errno = EINVAL;
+		return -1;
+	}
 
 	if (!strcmp(fstype, "ntfs")) {
 		filesystems = ntfs_fs;
@@ -984,58 +1040,41 @@ static int handle_mount(const char *source, const char *target,
 	}
 
 	for (i = 0; i < count; i++) {
-		const char *fs = filesystems[i];
-
-		err = mount(source, target, fs, m ? m->flags : 0,
+		err = mount(source, target, filesystems[i], m ? m->flags : 0,
 			    (m && m->options) ? m->options : "");
 		if (!err || errno != ENODEV)
 			break;
 	}
 
-	/* Requested file system type is not available in kernel,
-	   attempt to call mount helper. */
-	if (err == -1 && errno == ENODEV) {
-		if (m) {
-			/* Convert mount flags back into string representation,
-			   first calculate needed length of string buffer... */
-			mount_opts_len = 1 + (m->options ? strlen(m->options) + 1 : 0);
+	if (!err)
+		return 0;
 
-			for (i = 0; i < ARRAY_SIZE(mount_flags); i++)
-				if ((mount_flags[i].flag > 0) &&
-				    (mount_flags[i].flag < INT_MAX) &&
-				    (m->flags & (uint32_t)mount_flags[i].flag))
-					mount_opts_len += strlen(mount_flags[i].name) + 1;
+	mount_errno = errno;
 
-			/* ... then now allocate and fill it ... */
-			ptr = mount_opts = calloc(1, mount_opts_len);
+	if (m) {
+		mount_opts = mount_opts_get(m);
 
-			if (!ptr) {
-				errno = ENOMEM;
-				return -1;
-			}
-
-			if (m->options)
-				ptr += sprintf(ptr, "%s,", m->options);
-
-			for (i = 0; i < ARRAY_SIZE(mount_flags); i++)
-				if ((mount_flags[i].flag > 0) &&
-				    (mount_flags[i].flag < INT_MAX) &&
-				    (m->flags & (uint32_t)mount_flags[i].flag))
-					ptr += sprintf(ptr, "%s,", mount_flags[i].name);
-
-			if (ptr > mount_opts)
-				*(ptr - 1) = 0;
-		}
-
-		/* ... and now finally invoke the external mount program */
-		for (i = 0; i < count; i++) {
-			const char *fs = filesystems[i];
-
-			err = exec_mount(source, target, fs, mount_opts);
-			if (!err)
-				break;
+		if (!mount_opts) {
+			errno = ENOMEM;
+			return -1;
 		}
 	}
+
+	attempted = false;
+
+	for (i = 0; i < count; i++) {
+		if (!mount_helper_get("mount", filesystems[i], cmd, sizeof(cmd)))
+			continue;
+
+		attempted = true;
+
+		err = exec_mount(cmd, source, target, filesystems[i], mount_opts);
+		if (!err)
+			break;
+	}
+
+	if (!attempted)
+		errno = mount_errno;
 
 	free(mount_opts);
 
