@@ -977,7 +977,7 @@ static int handle_mount(const char *source, const char *target,
 		if (m) {
 			/* Convert mount flags back into string representation,
 			   first calculate needed length of string buffer... */
-			mount_opts_len = 1 + (m->options ? strlen(m->options) : 0);
+			mount_opts_len = 1 + (m->options ? strlen(m->options) + 1 : 0);
 
 			for (i = 0; i < ARRAY_SIZE(mount_flags); i++)
 				if ((mount_flags[i].flag > 0) &&
@@ -1002,7 +1002,8 @@ static int handle_mount(const char *source, const char *target,
 				    (m->flags & (uint32_t)mount_flags[i].flag))
 					ptr += sprintf(ptr, "%s,", mount_flags[i].name);
 
-			mount_opts[mount_opts_len - 1] = 0;
+			if (ptr > mount_opts)
+				*(ptr - 1) = 0;
 		}
 
 		/* ... and now finally invoke the external mount program */
