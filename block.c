@@ -716,6 +716,46 @@ static char* find_mount_point(char *block)
 	return point;
 }
 
+static char *mount_fstype_get(const char *mp)
+{
+	char *type = NULL, *point, *pos;
+	static char line[256];
+	FILE *fp;
+
+	fp = fopen("/proc/self/mounts", "r");
+
+	if (!fp)
+		return NULL;
+
+	while (fgets(line, sizeof(line), fp)) {
+		pos = strchr(line, ' ');
+		if (!pos)
+			continue;
+
+		point = ++pos;
+		pos = strchr(pos, ' ');
+		if (!pos)
+			continue;
+
+		*pos = '\0';
+		if (strcmp(point, mp))
+			continue;
+
+		point = ++pos;
+		pos = strchr(pos, ' ');
+		if (!pos)
+			continue;
+
+		*pos = '\0';
+		type = strdup(point);
+		break;
+	}
+
+	fclose(fp);
+
+	return type;
+}
+
 static int print_block_uci(struct probe_info *pr)
 {
 	if (!strcmp(pr->type, "swap")) {
@@ -882,30 +922,12 @@ static bool mount_helper_get(const char *tool, const char *fstype, char *cmd,
 	return !stat(cmd, &s) && S_ISREG(s.st_mode) && (s.st_mode & S_IXUSR);
 }
 
-static int exec_mount(const char *cmd, const char *source, const char *target,
-                      const char *fstype, const char *options)
+static int exec_helper(const char *cmd, char **argv)
 {
-	int a = 0, err, status, pfds[2];
-	const char *argv[8];
+	int err, status, pfds[2];
 	char errmsg[128];
 	FILE *mount_fd;
 	pid_t pid;
-
-	argv[a++] = cmd;
-	argv[a++] = source;
-	argv[a++] = target;
-
-	if (options && *options) {
-		argv[a++] = "-o";
-		argv[a++] = options;
-	}
-
-	if (strchr(fstype, '.')) {
-		argv[a++] = "-t";
-		argv[a++] = fstype;
-	}
-
-	argv[a] = NULL;
 
 	if (pipe(pfds) < 0)
 		return -1;
@@ -930,7 +952,7 @@ static int exec_mount(const char *cmd, const char *source, const char *target,
 		close(pfds[0]);
 		close(pfds[1]);
 
-		execv(cmd, (char **)argv);
+		execv(cmd, argv);
 
 		_exit(127);
 
@@ -974,6 +996,49 @@ static int exec_mount(const char *cmd, const char *source, const char *target,
 	}
 
 	return err;
+}
+
+static int exec_mount(const char *cmd, const char *source, const char *target,
+                      const char *fstype, const char *options)
+{
+	const char *argv[8];
+	int a = 0;
+
+	argv[a++] = cmd;
+	argv[a++] = source;
+	argv[a++] = target;
+
+	if (options && *options) {
+		argv[a++] = "-o";
+		argv[a++] = options;
+	}
+
+	if (strchr(fstype, '.')) {
+		argv[a++] = "-t";
+		argv[a++] = fstype;
+	}
+
+	argv[a] = NULL;
+
+	return exec_helper(cmd, (char **)argv);
+}
+
+static int exec_umount(const char *cmd, const char *target, const char *fstype)
+{
+	const char *argv[5];
+	int a = 0;
+
+	argv[a++] = cmd;
+	argv[a++] = target;
+
+	if (strchr(fstype, '.')) {
+		argv[a++] = "-t";
+		argv[a++] = fstype;
+	}
+
+	argv[a] = NULL;
+
+	return exec_helper(cmd, (char **)argv);
 }
 
 /* a mount helper takes as option words what mount(2) takes as flag bits */
@@ -1286,7 +1351,8 @@ static int mount_device(struct probe_info *pr, const char *options, int type)
 
 static int umount_device(char *path, int type, bool all)
 {
-	char *mp, *devpath;
+	char cmd[sizeof("/sbin/umount.") + NAME_MAX];
+	char *mp, *devpath, *fstype;
 	int err;
 
 	if (strlen(path) > 5 && !strncmp("/dev/", path, 5)) {
@@ -1308,7 +1374,15 @@ static int umount_device(char *path, int type, bool all)
 	if (type != TYPE_AUTOFS)
 		blockd_notify("umount", basename(path), NULL, NULL);
 
-	err = umount2(mp, MNT_DETACH);
+	fstype = mount_fstype_get(mp);
+
+	if (fstype && mount_helper_get("umount", fstype, cmd, sizeof(cmd)))
+		err = exec_umount(cmd, mp, fstype);
+	else
+		err = umount2(mp, MNT_DETACH);
+
+	free(fstype);
+
 	if (err) {
 		ULOG_ERR("unmounting %s (%s) failed (%d) - %m\n", path, mp,
 			 errno);
