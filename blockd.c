@@ -195,16 +195,11 @@ static void device_mount_remove_hotplug_cb(struct uloop_process *p, int stat)
 {
 	struct hotplug_context *hctx = container_of(p, struct hotplug_context, process);
 	struct device *device = hctx->priv;
-	char *mp;
 
 	if (device->target)
 		unlink(device->target);
 
-	mp = _find_mount_point(device->name);
-	if (mp) {
-		block("autofs", "remove", device->name, NULL, 0, NULL);
-		free(mp);
-	}
+	block("autofs", "remove", device->name, NULL, 0, NULL);
 
 	free(device);
 	free(hctx);
