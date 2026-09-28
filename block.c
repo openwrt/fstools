@@ -75,6 +75,7 @@ struct mount {
 	char *label;
 	char *device;
 	char *fstype;
+	char *source;
 	int extroot;
 	int autofs;
 	int overlay;
@@ -117,6 +118,7 @@ enum {
 	MOUNT_OPTIONS,
 	MOUNT_AUTOFS,
 	MOUNT_FSTYPE,
+	MOUNT_SOURCE,
 	__MOUNT_MAX
 };
 
@@ -134,6 +136,7 @@ static const struct blobmsg_policy mount_policy[__MOUNT_MAX] = {
 	[MOUNT_ENABLE] = { .name = "enabled", .type = BLOBMSG_TYPE_INT32 },
 	[MOUNT_AUTOFS] = { .name = "autofs", .type = BLOBMSG_TYPE_INT32 },
 	[MOUNT_FSTYPE] = { .name = "fstype", .type = BLOBMSG_TYPE_STRING },
+	[MOUNT_SOURCE] = { .name = "source", .type = BLOBMSG_TYPE_STRING },
 };
 
 static const struct uci_blob_param_list mount_attr_list = {
@@ -263,6 +266,91 @@ static void parse_mount_options(struct mount *m, char *optstr)
 	free(optstr);
 }
 
+/* the key is one path component under the autofs root, so it cannot hold '/' */
+static char *netmount_key(const char *target)
+{
+	char *key, *p;
+
+	if (!target || *target != '/')
+		return NULL;
+
+	key = strdup(target + 1);
+
+	if (!key)
+		return NULL;
+
+	if (!*key || strlen(key) > NAME_MAX) {
+		free(key);
+		return NULL;
+	}
+
+	for (p = key; *p; p++)
+		if (*p == '/')
+			*p = '_';
+
+	return key;
+}
+
+static int netmount_add(struct uci_section *s, struct blob_attr **tb)
+{
+	struct mount *m;
+	char *key;
+
+	if (tb[MOUNT_UUID] || tb[MOUNT_LABEL] || tb[MOUNT_DEVICE]) {
+		ULOG_WARN("ignoring mount section %s, source excludes uuid, label and device\n",
+		          s->e.name);
+		return -1;
+	}
+
+	if (!tb[MOUNT_FSTYPE] || !tb[MOUNT_TARGET]) {
+		ULOG_WARN("ignoring mount section %s, source needs fstype and target\n",
+		          s->e.name);
+		return -1;
+	}
+
+	if (tb[MOUNT_ENABLE] && !blobmsg_get_u32(tb[MOUNT_ENABLE]))
+		return -1;
+
+	key = netmount_key(blobmsg_get_string(tb[MOUNT_TARGET]));
+
+	if (!key) {
+		ULOG_WARN("ignoring mount section %s due to invalid target '%s'\n",
+		          s->e.name, blobmsg_get_string(tb[MOUNT_TARGET]));
+		return -1;
+	}
+
+	if (vlist_find(&mounts, key, m, node)) {
+		ULOG_WARN("ignoring mount section %s, '%s' is already in use\n",
+		          s->e.name, key);
+		free(key);
+		return -1;
+	}
+
+	m = calloc(1, sizeof(struct mount));
+
+	if (!m) {
+		free(key);
+		return -1;
+	}
+
+	m->type = TYPE_MOUNT;
+	m->autofs = 1;
+	m->device = key;
+	m->source = blobmsg_get_strdup(tb[MOUNT_SOURCE]);
+	m->fstype = blobmsg_get_strdup(tb[MOUNT_FSTYPE]);
+	m->target = blobmsg_get_strdup(tb[MOUNT_TARGET]);
+	parse_mount_options(m, blobmsg_get_strdup(tb[MOUNT_OPTIONS]));
+	m->check_fs = 0;
+
+	if (tb[MOUNT_AUTOFS] && !blobmsg_get_u32(tb[MOUNT_AUTOFS]))
+		ULOG_WARN("mount section %s is served by autofs regardless\n",
+		          s->e.name);
+
+	vlist_add(&mounts, &m->node, m->device);
+
+	return 0;
+}
+
 static int mount_add(struct uci_section *s)
 {
 	struct blob_attr *tb[__MOUNT_MAX] = { 0 };
@@ -271,6 +359,9 @@ static int mount_add(struct uci_section *s)
 	blob_buf_init(&b, 0);
 	uci_to_blob(&b, s, &mount_attr_list);
 	blobmsg_parse(mount_policy, __MOUNT_MAX, tb, blob_data(b.head), blob_len(b.head));
+
+	if (tb[MOUNT_SOURCE])
+		return netmount_add(s, tb);
 
 	if (!tb[MOUNT_LABEL] && !tb[MOUNT_UUID] && !tb[MOUNT_DEVICE])
 		return -1;
@@ -1356,9 +1447,18 @@ static int mount_device(struct probe_info *pr, const char *options, int type)
 	return 0;
 }
 
-static int umount_device(char *path, int type, bool all)
+static int umount_path(const char *mp, const char *fstype)
 {
 	char cmd[sizeof("/sbin/umount.") + NAME_MAX];
+
+	if (fstype && mount_helper_get("umount", fstype, cmd, sizeof(cmd)))
+		return exec_umount(cmd, mp, fstype);
+
+	return umount2(mp, MNT_DETACH);
+}
+
+static int umount_device(char *path, int type, bool all)
+{
 	char *mp, *devpath, *fstype;
 	int err;
 
@@ -1382,12 +1482,7 @@ static int umount_device(char *path, int type, bool all)
 		blockd_notify("umount", basename(path), NULL, NULL);
 
 	fstype = mount_fstype_get(mp);
-
-	if (fstype && mount_helper_get("umount", fstype, cmd, sizeof(cmd)))
-		err = exec_umount(cmd, mp, fstype);
-	else
-		err = umount2(mp, MNT_DETACH);
-
+	err = umount_path(mp, fstype);
 	free(fstype);
 
 	if (err) {
@@ -1402,6 +1497,94 @@ static int umount_device(char *path, int type, bool all)
 	return err;
 }
 
+static struct mount *netmount_find(const char *key)
+{
+	struct mount *m;
+
+	m = vlist_find(&mounts, key, m, node);
+
+	if (!m || m->type != TYPE_MOUNT || !m->source)
+		return NULL;
+
+	return m;
+}
+
+static int netmount_mount(const char *key, int type)
+{
+	char *target = NULL;
+	struct mount *m;
+	char *mp;
+	int err;
+
+	m = netmount_find(key);
+
+	if (!m || type != TYPE_AUTOFS)
+		return -1;
+
+	mp = find_mount_point(m->source);
+
+	if (mp) {
+		free(mp);
+		return 0;
+	}
+
+	if (asprintf(&target, "/tmp/run/blockd/%s", m->device) == -1)
+		exit(ENOMEM);
+
+	mkdir_p(target, 0755);
+
+	err = handle_mount(m->source, target, m->fstype, m);
+
+	if (err)
+		ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
+		         m->source, m->fstype, target, errno);
+	else
+		ULOG_INFO("mounted %s (%s) on %s\n", m->source, m->fstype,
+		          target);
+
+	free(target);
+
+	return err;
+}
+
+static int netmount_umount(const char *key)
+{
+	struct mount *m;
+	char *mp;
+	int err;
+
+	m = netmount_find(key);
+
+	if (!m)
+		return -1;
+
+	mp = find_mount_point(m->source);
+
+	if (!mp)
+		return 0;
+
+	err = umount_path(mp, m->fstype);
+
+	if (err)
+		ULOG_ERR("unmounting %s (%s) failed (%d) - %m\n", m->source, mp,
+		         errno);
+	else
+		ULOG_INFO("unmounted %s (%s)\n", m->source, mp);
+
+	free(mp);
+
+	return err;
+}
+
+static void netmount_umount_all(void)
+{
+	struct mount *m;
+
+	vlist_for_each_element(&mounts, m, node)
+		if (m->type == TYPE_MOUNT && m->source)
+			netmount_umount(m->device);
+}
+
 static int mount_action(char *action, char *device, const char *options, int type)
 {
 	char *path = NULL;
@@ -1414,7 +1597,8 @@ static int mount_action(char *action, char *device, const char *options, int typ
 		if (type == TYPE_HOTPLUG)
 			blockd_notify("hotplug", device, NULL, NULL);
 
-		umount_device(device, type, true);
+		if (config_load(NULL) || netmount_umount(device))
+			umount_device(device, type, true);
 
 		return 0;
 	} else if (strcmp(action, "add")) {
@@ -1433,7 +1617,7 @@ static int mount_action(char *action, char *device, const char *options, int typ
 			path = pr->dev;
 
 	if (!path)
-		return -1;
+		return netmount_mount(device, type);
 
 	return mount_device(find_block_info(NULL, NULL, path), options, type);
 }
@@ -1441,6 +1625,23 @@ static int mount_action(char *action, char *device, const char *options, int typ
 static int main_hotplug(int argc, char **argv)
 {
 	return mount_action(getenv("ACTION"), getenv("DEVNAME"), NULL, TYPE_HOTPLUG);
+}
+
+/* a share has nothing to probe, so its registration comes from the config */
+static void netmount_register(void)
+{
+	struct probe_info pr = { 0 };
+	struct mount *m;
+
+	vlist_for_each_element(&mounts, m, node) {
+		if (m->type != TYPE_MOUNT || !m->source)
+			continue;
+
+		pr.dev = m->source;
+		pr.type = m->fstype;
+
+		blockd_notify("hotplug", m->device, m, &pr);
+	}
 }
 
 static int main_autofs(int argc, char **argv)
@@ -1474,6 +1675,8 @@ static int main_autofs(int argc, char **argv)
 				free(mp);
 			}
 		}
+
+		netmount_register();
 	} else {
 		if (argc < 4)
 			return -EINVAL;
@@ -1933,6 +2136,8 @@ static int main_umount(int argc, char **argv)
 
 		umount_device(pr->dev, TYPE_DEV, all);
 	}
+
+	netmount_umount_all();
 
 	return 0;
 }
