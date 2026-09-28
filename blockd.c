@@ -588,6 +588,7 @@ struct autofs_op {
 	struct uloop_process process;
 	struct list_head list;
 	autofs_wqt_t token;
+	bool umount;
 	bool running;
 	char name[];
 };
@@ -627,15 +628,15 @@ static char *autofs_mount_options(const char *name, char *buf, size_t len)
 	return options;
 }
 
-static bool autofs_op_busy(const char *name)
+static struct autofs_op *autofs_op_get(const char *name)
 {
 	struct autofs_op *op;
 
 	list_for_each_entry(op, &autofs_ops, list)
-		if (op->running && !strcmp(op->name, name))
-			return true;
+		if (!strcmp(op->name, name))
+			return op;
 
-	return false;
+	return NULL;
 }
 
 static void autofs_ops_pump(void)
@@ -643,19 +644,25 @@ static void autofs_ops_pump(void)
 	struct autofs_op *op, *tmp;
 	char optbuf[256];
 	char *options;
+	char *action;
 
 	list_for_each_entry_safe(op, tmp, &autofs_ops, list) {
-		if (op->running || autofs_op_busy(op->name))
+		if (op->running || autofs_op_get(op->name) != op)
 			continue;
 
-		options = autofs_mount_options(op->name, optbuf,
+		action = op->umount ? "remove" : "add";
+		options = op->umount ? NULL :
+			  autofs_mount_options(op->name, optbuf,
 					       sizeof(optbuf));
 		op->running = true;
 
-		if (!block("autofs", "add", op->name, options, 0, &op->process))
+		if (!block("autofs", action, op->name, options, 0,
+			   &op->process))
 			continue;
 
-		autofs_answer(op->token, false);
+		if (!op->umount)
+			autofs_answer(op->token, false);
+
 		list_del(&op->list);
 		free(op);
 	}
@@ -664,13 +671,35 @@ static void autofs_ops_pump(void)
 static void autofs_op_cb(struct uloop_process *p, int stat)
 {
 	struct autofs_op *op = container_of(p, struct autofs_op, process);
+	bool ok = WIFEXITED(stat) && !WEXITSTATUS(stat);
 
-	autofs_answer(op->token, WIFEXITED(stat) && !WEXITSTATUS(stat));
+	if (!op->umount)
+		autofs_answer(op->token, ok);
+	else if (ok)
+		send_block_notification(&conn.ctx, "umount", op->name, NULL);
 
 	list_del(&op->list);
 	free(op);
 
 	autofs_ops_pump();
+}
+
+static struct autofs_op *autofs_op_add(const char *name, bool umount)
+{
+	struct autofs_op *op;
+
+	op = calloc(1, sizeof(*op) + strlen(name) + 1);
+
+	if (!op)
+		return NULL;
+
+	strcpy(op->name, name);
+	op->umount = umount;
+	op->process.cb = autofs_op_cb;
+
+	list_add_tail(&op->list, &autofs_ops);
+
+	return op;
 }
 
 static void autofs_read_handler(struct uloop_fd *u, unsigned int events)
@@ -693,18 +722,14 @@ static void autofs_read_handler(struct uloop_fd *u, unsigned int events)
 	pkt = &pktu.missing_indirect;
 	ULOG_ERR("kernel is requesting a mount -> %s\n", pkt->name);
 
-	op = calloc(1, sizeof(*op) + strlen(pkt->name) + 1);
+	op = autofs_op_add(pkt->name, false);
 
 	if (!op) {
 		autofs_answer(pkt->wait_queue_token, false);
 		return;
 	}
 
-	strcpy(op->name, pkt->name);
 	op->token = pkt->wait_queue_token;
-	op->process.cb = autofs_op_cb;
-
-	list_add_tail(&op->list, &autofs_ops);
 
 	autofs_ops_pump();
 }
@@ -713,13 +738,11 @@ static void autofs_expire(struct uloop_timeout *t)
 {
 	struct autofs_packet_expire pkt;
 
-	while (ioctl(fd_autofs_write, AUTOFS_IOC_EXPIRE, &pkt) == 0) {
-		block("autofs", "remove", pkt.name, NULL, 1, NULL);
-		/* the idle mount has been torn down, so its backing block device
-		 * now has no holder; signal subscribers (e.g. uvol's deferred reap)
-		 * that the device became free */
-		send_block_notification(&conn.ctx, "umount", pkt.name, NULL);
-	}
+	while (ioctl(fd_autofs_write, AUTOFS_IOC_EXPIRE, &pkt) == 0)
+		if (!autofs_op_get(pkt.name))
+			autofs_op_add(pkt.name, true);
+
+	autofs_ops_pump();
 
 	uloop_timeout_set(t, AUTOFS_EXPIRE_TIMER);
 }
