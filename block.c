@@ -74,6 +74,7 @@ struct mount {
 	char *uuid;
 	char *label;
 	char *device;
+	char *fstype;
 	int extroot;
 	int autofs;
 	int overlay;
@@ -115,6 +116,7 @@ enum {
 	MOUNT_DEVICE,
 	MOUNT_OPTIONS,
 	MOUNT_AUTOFS,
+	MOUNT_FSTYPE,
 	__MOUNT_MAX
 };
 
@@ -131,6 +133,7 @@ static const struct blobmsg_policy mount_policy[__MOUNT_MAX] = {
 	[MOUNT_OPTIONS] = { .name = "options", .type = BLOBMSG_TYPE_STRING },
 	[MOUNT_ENABLE] = { .name = "enabled", .type = BLOBMSG_TYPE_INT32 },
 	[MOUNT_AUTOFS] = { .name = "autofs", .type = BLOBMSG_TYPE_INT32 },
+	[MOUNT_FSTYPE] = { .name = "fstype", .type = BLOBMSG_TYPE_STRING },
 };
 
 static const struct uci_blob_param_list mount_attr_list = {
@@ -281,6 +284,7 @@ static int mount_add(struct uci_section *s)
 	m->label = blobmsg_get_strdup(tb[MOUNT_LABEL]);
 	m->target = blobmsg_get_strdup(tb[MOUNT_TARGET]);
 	m->device = blobmsg_get_basename(tb[MOUNT_DEVICE]);
+	m->fstype = blobmsg_get_strdup(tb[MOUNT_FSTYPE]);
 	if (tb[MOUNT_AUTOFS])
 		m->autofs = blobmsg_get_u32(tb[MOUNT_AUTOFS]);
 	else
@@ -1228,9 +1232,10 @@ static struct mount* autofs_runtime_block(const char *device)
 
 static int mount_device(struct probe_info *pr, const char *options, int type)
 {
+	char *_target = NULL;
+	const char *fstype;
 	struct mount *m;
 	struct stat st;
-	char *_target = NULL;
 	char *target;
 	char *device;
 	char *mp;
@@ -1327,10 +1332,12 @@ static int mount_device(struct probe_info *pr, const char *options, int type)
 	if (!lstat(target, &st) && S_ISLNK(st.st_mode))
 		unlink(target);
 
-	err = handle_mount(pr->dev, target, pr->type, m);
+	fstype = (m && m->fstype) ? m->fstype : pr->type;
+
+	err = handle_mount(pr->dev, target, fstype, m);
 	if (err) {
 		ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
-				pr->dev, pr->type, target, errno);
+				pr->dev, fstype, target, errno);
 
 		if (_target)
 			free(_target);
