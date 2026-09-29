@@ -47,6 +47,7 @@
 #include "probe.h"
 
 #define AUTOFS_MOUNT_PATH       "/tmp/run/blockd/"
+#define NETMOUNT_STATE          "/var/run/blockd.netmounts"
 
 #ifdef UBIFS_EXTROOT
 #include "libubi/libubi.h"
@@ -1640,10 +1641,51 @@ static int main_hotplug(int argc, char **argv)
 }
 
 /* a share has nothing to probe, so its registration comes from the config */
+static bool netmount_configured(const char *key)
+{
+	struct mount *m = NULL;
+
+	m = vlist_find(&mounts, key, m, node);
+
+	return m && m->source;
+}
+
+/* A share exists only in the configuration, so a section that has been
+ * deleted is never announced by anything and blockd would keep serving it.
+ */
+static void netmount_forget(void)
+{
+	char key[NAME_MAX + 2];
+	FILE *state;
+	char *end;
+
+	state = fopen(NETMOUNT_STATE, "r");
+
+	if (!state)
+		return;
+
+	while (fgets(key, sizeof(key), state)) {
+		end = strchr(key, '\n');
+
+		if (end)
+			*end = '\0';
+
+		if (*key && !netmount_configured(key))
+			blockd_notify("hotplug", key, NULL, NULL);
+	}
+
+	fclose(state);
+}
+
 static void netmount_register(void)
 {
 	struct probe_info pr = { 0 };
 	struct mount *m;
+	FILE *state;
+
+	netmount_forget();
+
+	state = fopen(NETMOUNT_STATE, "w");
 
 	vlist_for_each_element(&mounts, m, node) {
 		if (m->type != TYPE_MOUNT || !m->source)
@@ -1653,7 +1695,13 @@ static void netmount_register(void)
 		pr.type = m->fstype;
 
 		blockd_notify("hotplug", m->device, m, &pr);
+
+		if (state)
+			fprintf(state, "%s\n", m->device);
 	}
+
+	if (state)
+		fclose(state);
 }
 
 static int main_autofs(int argc, char **argv)
