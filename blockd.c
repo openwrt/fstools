@@ -715,7 +715,7 @@ static void autofs_read_handler(struct uloop_fd *u, unsigned int events)
 	}
 
 	pkt = &pktu.missing_indirect;
-	ULOG_ERR("kernel is requesting a mount -> %s\n", pkt->name);
+	ULOG_INFO("kernel is requesting a mount -> %s\n", pkt->name);
 
 	op = autofs_op_add(pkt->name, false);
 
