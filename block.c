@@ -1084,7 +1084,10 @@ static int exec_helper(const char *cmd, char **argv)
 			ULOG_ERR("%s: terminated by %s\n", cmd,
 				 strsignal(WTERMSIG(status)));
 
-		errno = EINVAL;
+		/* The helper has diagnosed itself above; errno describes
+		 * nothing of what went wrong.
+		 */
+		errno = 0;
 		err = -1;
 
 		break;
@@ -1321,6 +1324,17 @@ static struct mount* autofs_runtime_block(const char *device)
 	return &m;
 }
 
+static void mount_failed(const char *source, const char *fstype,
+			 const char *target)
+{
+	if (errno)
+		ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
+			 source, fstype, target, errno);
+	else
+		ULOG_ERR("mounting %s (%s) as %s failed\n",
+			 source, fstype, target);
+}
+
 static int mount_device(struct probe_info *pr, const char *options, int type)
 {
 	char *_target = NULL;
@@ -1427,8 +1441,7 @@ static int mount_device(struct probe_info *pr, const char *options, int type)
 
 	err = handle_mount(pr->dev, target, fstype, m);
 	if (err) {
-		ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
-				pr->dev, fstype, target, errno);
+		mount_failed(pr->dev, fstype, target);
 
 		if (_target)
 			free(_target);
@@ -1536,8 +1549,7 @@ static int netmount_mount(const char *key, int type)
 	err = handle_mount(m->source, target, m->fstype, m);
 
 	if (err)
-		ULOG_ERR("mounting %s (%s) as %s failed (%d) - %m\n",
-		         m->source, m->fstype, target, errno);
+		mount_failed(m->source, m->fstype, target);
 	else
 		ULOG_INFO("mounted %s (%s) on %s\n", m->source, m->fstype,
 		          target);
