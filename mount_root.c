@@ -115,7 +115,14 @@ stop(int argc, char *argv[1])
 static int
 done(int argc, char *argv[1])
 {
-	struct volume *v = volume_find("rootfs_data");
+	char dataparam[BUFLEN];
+	char *dataname = "rootfs_data";
+	struct volume *v;
+
+	if (get_var_from_file("/proc/cmdline", "fstools_overlay_name", dataparam, sizeof(dataparam)))
+		dataname = dataparam;
+
+	v = volume_find(dataname);
 
 	if (!v)
 		return -1;
