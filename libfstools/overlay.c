@@ -94,8 +94,12 @@ foreachdir(const char *dir, int (*cb)(const char*))
 
 	sprintf(globdir, "%s/*", dir);
 
-	/* Include GLOB_MARK as callbacks expect a trailing slash */
-	if (!glob(globdir, GLOB_NOESCAPE | GLOB_MARK | GLOB_ONLYDIR, NULL, &gl))
+	/*
+	 * Include GLOB_MARK as callbacks expect a trailing slash, and
+	 * GLOB_PERIOD as hidden directories need visiting as well
+	 */
+	if (!glob(globdir, GLOB_NOESCAPE | GLOB_MARK | GLOB_ONLYDIR | GLOB_PERIOD,
+		  NULL, &gl))
 		for (j = 0; j < gl.gl_pathc; j++) {
 			char *dir = gl.gl_pathv[j];
 			int len = strlen(gl.gl_pathv[j]);
@@ -103,6 +107,11 @@ foreachdir(const char *dir, int (*cb)(const char*))
 
 			/* Quick way of skipping files */
 			if (dir[len - 1] != '/')
+				continue;
+
+			/* glibc's GLOB_PERIOD also lets * match . and .. */
+			if ((len >= 3 && !strcmp(dir + len - 3, "/./")) ||
+			    (len >= 4 && !strcmp(dir + len - 4, "/../")))
 				continue;
 
 			/* lstat needs path without a trailing slash */
