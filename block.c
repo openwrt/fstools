@@ -30,6 +30,8 @@
 #include <sys/types.h>
 #include <sys/swap.h>
 #include <sys/mount.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <sys/sysmacros.h>
 
@@ -901,9 +903,57 @@ static int print_block_info(struct probe_info *pr)
 	return 0;
 }
 
+static void log_check_line(const char *name, char *line)
+{
+	line[strcspn(line, "\r")] = '\0';
+	if (*line)
+		ULOG_NOTE("%s: %s\n", name, line);
+}
+
+/* read to the end: closing the pipe early would kill the checker */
+static void log_check_output(const char *ckfs, int fd)
+{
+	const char *name = strrchr(ckfs, '/') ? strrchr(ckfs, '/') + 1 : ckfs;
+	char buf[256], *start, *nl;
+	size_t len = 0;
+	ssize_t n;
+
+	while (1) {
+		n = read(fd, buf + len, sizeof(buf) - 1 - len);
+		if (n < 0 && errno == EINTR)
+			continue;
+		if (n <= 0)
+			break;
+		len += n;
+
+		start = buf;
+		while ((nl = memchr(start, '\n', buf + len - start))) {
+			*nl = '\0';
+			log_check_line(name, start);
+			start = nl + 1;
+		}
+		len -= start - buf;
+		memmove(buf, start, len);
+
+		/* a line longer than the buffer goes out in parts */
+		if (len == sizeof(buf) - 1) {
+			buf[len] = '\0';
+			log_check_line(name, buf);
+			len = 0;
+		}
+	}
+
+	if (len) {
+		buf[len] = '\0';
+		log_check_line(name, buf);
+	}
+	close(fd);
+}
+
 static void check_filesystem(struct probe_info *pr)
 {
 	pid_t pid;
+	int out[2];
 	struct stat statbuf;
 	const char *e2fsck = "/usr/sbin/e2fsck";
 	const char *f2fsck = "/usr/sbin/fsck.f2fs";
@@ -936,8 +986,15 @@ static void check_filesystem(struct probe_info *pr)
 		return;
 	}
 
+	if (pipe2(out, O_CLOEXEC))
+		out[0] = out[1] = -1;
+
 	pid = fork();
 	if (!pid) {
+		if (out[1] >= 0) {
+			dup2(out[1], STDOUT_FILENO);
+			dup2(out[1], STDERR_FILENO);
+		}
 		if(!strncmp(pr->type, "f2fs", 4)) {
 			execl(ckfs, ckfs, "-a", pr->dev, NULL);
 			exit(EXIT_FAILURE);
@@ -954,11 +1011,19 @@ static void check_filesystem(struct probe_info *pr)
 	} else if (pid > 0) {
 		int status;
 
+		if (out[1] >= 0)
+			close(out[1]);
+		if (out[0] >= 0)
+			log_check_output(ckfs, out[0]);
+
 		waitpid(pid, &status, 0);
 		if (WIFEXITED(status) && WEXITSTATUS(status))
 			ULOG_ERR("check_filesystem: %s returned %d\n", ckfs, WEXITSTATUS(status));
 		if (WIFSIGNALED(status))
 			ULOG_ERR("check_filesystem: %s terminated by %s\n", ckfs, strsignal(WTERMSIG(status)));
+	} else if (out[0] >= 0) {
+		close(out[0]);
+		close(out[1]);
 	}
 }
 
@@ -2373,13 +2438,35 @@ static int main_swapoff(int argc, char **argv)
 	return 0;
 }
 
+/* syslog drops what is sent before the log service runs, as at boot, but
+ * the kernel log keeps it for the log service to read once it starts
+ */
+static int log_channels(void)
+{
+	struct sockaddr_un addr = { .sun_family = AF_UNIX, .sun_path = "/dev/log" };
+	const char *preinit = getenv("PREINIT");
+	int fd, ret;
+
+	if ((preinit && !strcmp(preinit, "1")) || isatty(STDOUT_FILENO))
+		return -1;
+
+	fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+	if (fd < 0)
+		return ULOG_KMSG;
+
+	ret = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+	close(fd);
+
+	return ret ? ULOG_KMSG : ULOG_SYSLOG;
+}
+
 int main(int argc, char **argv)
 {
 	char *base = basename(*argv);
 
 	umask(0);
 
-	ulog_open(-1, -1, "block");
+	ulog_open(log_channels(), -1, "block");
 	ulog_threshold(LOG_NOTICE);
 
 	if (!strcmp(base, "swapon"))
