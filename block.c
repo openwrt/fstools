@@ -516,12 +516,25 @@ static void mounts_update(struct vlist_tree *tree, struct vlist_node *node_new,
 {
 }
 
+/* set when at least one candidate fstab exists, so a failure is a real error */
+static bool config_file_found;
+static bool config_skip_logged;
+
 static struct uci_package * config_try_load(struct uci_context *ctx, char *path)
 {
-	char *file = basename(path);
-	char *dir = dirname(path);
+	char *file, *dir;
 	char *err;
 	struct uci_package *pkg;
+
+	/* missing file is normal (e.g. before overlay is mounted): skip silently.
+	 * any other failure (e.g. EACCES) falls through so uci_load() reports it. */
+	if (access(path, R_OK) && errno == ENOENT)
+		return NULL;
+
+	config_file_found = true;
+
+	file = basename(path);
+	dir = dirname(path);
 
 	uci_set_confdir(ctx, dir);
 	ULOG_INFO("attempting to load %s/%s\n", dir, file);
@@ -546,6 +559,8 @@ static int config_load(char *cfg)
 
 	vlist_init(&mounts, avl_strcmp, mounts_update);
 
+	config_file_found = false;
+
 	if (cfg) {
 		snprintf(path, sizeof(path), "%s/upper/etc/config/fstab", cfg);
 		pkg = config_try_load(ctx, path);
@@ -562,9 +577,21 @@ static int config_load(char *cfg)
 	}
 
 	if (!pkg) {
-		ULOG_ERR("no usable configuration\n");
+		/* no fstab at all is normal: INFO only; a present but broken one is an error */
+		if (config_file_found)
+			ULOG_ERR("no usable configuration\n");
+		else if (!config_skip_logged) {
+			/* config_load() may run several times per process: log once */
+			ULOG_INFO("no fstab configuration found, skipping\n");
+			config_skip_logged = true;
+		}
 		return -1;
 	}
+
+	/* An fstab was found and loaded. It may contain no valid extroot entry,
+	 * in which case the caller falls back to other lookups; do not log a
+	 * missing fstab in those later lookups, since one was already found. */
+	config_skip_logged = true;
 
 	vlist_update(&mounts);
 	uci_foreach_element(&pkg->sections, e) {
