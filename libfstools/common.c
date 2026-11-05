@@ -220,9 +220,9 @@ do_format:
 			if (use_f2fs_compression()) {
 				ULOG_INFO("f2fs overlay compression enabled\n");
 				snprintf(str, sizeof(str),
-					 "mkfs.f2fs -q -f -O extra_attr,compression -l rootfs_data %s", v->blk);
+					 "mkfs.f2fs -q -f -t 0 -O extra_attr,compression -l rootfs_data %s", v->blk);
 			} else {
-				snprintf(str, sizeof(str), "mkfs.f2fs -q -f -l rootfs_data %s", v->blk);
+				snprintf(str, sizeof(str), "mkfs.f2fs -q -f -t 0 -l rootfs_data %s", v->blk);
 			}
 		} else {
 			snprintf(str, sizeof(str), "mkfs.ext4 -q -F -L rootfs_data %s", v->blk);
