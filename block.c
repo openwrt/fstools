@@ -609,6 +609,55 @@ static int config_load(char *cfg)
 	return 0;
 }
 
+static bool mtd_is_attached_to_ubi(const char *mtdnum)
+{
+	DIR *dir;
+	struct dirent *entry;
+	char path[128];
+	char buf[32];
+	FILE *fp;
+	size_t i;
+	bool attached = false;
+
+	dir = opendir("/sys/class/ubi");
+	if (!dir)
+		return false;
+
+	while ((entry = readdir(dir)) != NULL) {
+		if (strncmp(entry->d_name, "ubi", 3) ||
+		    !entry->d_name[3])
+			continue;
+
+		/* Accept ubiN device entries, but not ubiN_M volume entries. */
+		for (i = 3; entry->d_name[i]; i++) {
+			if (entry->d_name[i] < '0' ||
+			    entry->d_name[i] > '9')
+				break;
+		}
+		if (entry->d_name[i])
+			continue;
+
+		snprintf(path, sizeof(path), "/sys/class/ubi/%s/mtd_num",
+			 entry->d_name);
+		fp = fopen(path, "r");
+		if (!fp)
+			continue;
+
+		if (fgets(buf, sizeof(buf), fp)) {
+			buf[strcspn(buf, "\r\n")] = '\0';
+			if (!strcmp(buf, mtdnum))
+				attached = true;
+		}
+		fclose(fp);
+
+		if (attached)
+			break;
+	}
+
+	closedir(dir);
+	return attached;
+}
+
 static bool mtdblock_is_nand(char *mtdnum)
 {
 	char tmppath[64];
@@ -630,6 +679,10 @@ static bool mtdblock_is_nand(char *mtdnum)
 
 	if (strcmp(buf, "nand"))
 		return false;
+
+	/* Avoid probing NAND already managed by UBI. */
+	if (mtd_is_attached_to_ubi(mtdnum))
+		return true;
 
 	/*
 	 * --- CUT HERE ---
